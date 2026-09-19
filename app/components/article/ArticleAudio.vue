@@ -97,8 +97,8 @@ defineExpose(
         if (key === 'src') return instance?.audioRef?.src
         if (key === 'volume') return instance?.audioRef?.volume
         if (key === 'playbackRate') return instance?.audioRef?.playbackRate
-        if (key === 'play') instance?.audioRef?.play()
-        if (key === 'pause') instance?.audioRef?.pause()
+        if (key === 'play') return () => instance?.audioRef?.play()
+        if (key === 'pause') return () => instance?.audioRef?.pause()
         return target[key]
       },
       set(_, key, value) {

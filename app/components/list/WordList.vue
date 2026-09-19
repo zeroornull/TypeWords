@@ -12,8 +12,8 @@ interface Props {
 }
 
 withDefaults(defineProps<Props>(), {
-  list: [],
-  excludeWords: [],
+  list: () => [],
+  excludeWords: () => [],
   showTranslate: true,
   showWord: true,
 })

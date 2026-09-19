@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { APP_NAME, LIB_JS_URL, Origin } from '@/core/config/env.ts'
-import { BaseIcon, Progress } from '@/base'
+import { BaseIcon, Progress, Toast } from '@/base'
 import { usePracticeStore } from '@/core/stores/practice.ts'
 import { useBaseStore } from '@/core/stores/base.ts'
 import { loadJsLib, msToHourMinute } from '@/core/utils'
@@ -43,12 +43,12 @@ async function copyImageToClipboard() {
 
     if (navigator.clipboard && (window as any).ClipboardItem) {
       await navigator.clipboard.write([new (window as any).ClipboardItem({ [blob.type || 'image/png']: blob })])
-      Toass.success('图片已复制到剪贴板！')
+      Toast.success('图片已复制到剪贴板！')
     } else {
       await downloadImage()
     }
   } catch (error) {
-    Toass.error('复制失败！')
+    Toast.error('复制失败！')
     await downloadImage()
   } finally {
     loading1 = false

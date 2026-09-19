@@ -32,7 +32,7 @@ interface IProps {
   mode?: PracticeType
   showPlayButton?: boolean
   isPractice?: boolean
-  play?: Function<any, any>
+  play?: (sentence: Sentence, done?: (() => void) | null) => void
   index?: string
 }
 

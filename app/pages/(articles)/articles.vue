@@ -7,7 +7,7 @@ import { useRuntimeStore } from '@/core/stores/runtime.ts'
 import { useSettingStore } from '@/core/stores/setting.ts'
 import { getDefaultDict } from '@/core/types/func.ts'
 import type { DictResource } from '@/core/types/types.ts'
-import { _getDictDataByUrl, msToHourMinute, resourceWrap, total, useNav } from '@/core/utils'
+import { _getDictDataByUrl, isDictIdMatch, msToHourMinute, resourceWrap, total, useNav } from '@/core/utils'
 import { useFetch } from '@vueuse/core'
 import dayjs from 'dayjs'
 import isBetween from 'dayjs/plugin/isBetween'
@@ -15,6 +15,7 @@ import isoWeek from 'dayjs/plugin/isoWeek'
 import { watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { DictType } from '@/core/types/enum.ts'
+import { applyFetchedDictResource } from '@/core/composables/dictResourceLoad'
 import { usePracticeArticlePersistence } from '@/core/composables/usePracticePersistence.ts'
 
 dayjs.extend(isoWeek)
@@ -70,25 +71,22 @@ async function init() {
     if (!store.sbook.custom && !store.sbook.articles.length) {
       let dictList = await fetch(resourceWrap(DICT_LIST.ARTICLE.ALL)).then(r => r.json())
       let dict = await _getDictDataByUrl(store.sbook, DictType.article)
-      let r = dictList.find(v => [v.enName, v.id].includes(store.sbook.id))
+      const leftover = store.article.bookList[studyIndex]
+      let r = (Array.isArray(dictList) ? dictList.flat() : []).find(v => isDictIdMatch(v, leftover.id))
       if (r) {
-        store.article.bookList[studyIndex].articles = dict.articles
-        store.article.bookList[studyIndex].id = r.id
-        store.article.bookList[studyIndex].enName = r.enName
-        store.article.bookList[studyIndex].cover = r.cover
-        store.article.bookList[studyIndex].category = r.category
-        store.article.bookList[studyIndex].tags = r.tags
-        store.article.bookList[studyIndex].url = r.url
-        store.article.bookList[studyIndex].description = r.description
-        store.article.bookList[studyIndex].name = r.name
-      } else {
-        store.article.bookList[studyIndex] = dict
+        leftover.id = r.id
+        leftover.enName = r.enName
+        leftover.cover = r.cover
+        leftover.category = r.category
+        leftover.tags = r.tags
+        leftover.url = r.url
+        leftover.description = r.description
+        leftover.name = r.name
       }
-      store.article.bookList[studyIndex].length = dict.articles.length
-      let s = store.article.bookList[studyIndex]
-      if (s.lastLearnIndex > s.length) {
-        store.article.bookList[studyIndex].lastLearnIndex = s.length
-        store.article.bookList[studyIndex].complete = true
+      applyFetchedDictResource(leftover, dict)
+      if (leftover.articles.length && leftover.lastLearnIndex > leftover.length) {
+        leftover.lastLearnIndex = leftover.length
+        leftover.complete = true
         //todo 后续加上
         // await resetCacheData()
       }

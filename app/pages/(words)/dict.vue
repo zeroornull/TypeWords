@@ -8,15 +8,22 @@ import {
   DeleteIcon,
   Form,
   FormItem,
+  type FormRules,
+  type FormType,
   PopConfirm,
   Textarea,
   Toast,
 } from '@/base'
 import { queryWord } from '@/core/apis/words.ts'
+import {
+  DESKTOP_WORD_QUERY_DISABLED_MESSAGE,
+  isDesktopWordQueryEnabled,
+} from '@/core/config/desktopOnlineFeatures.ts'
 import EditBook from '@/components/article/EditBook.vue'
 import BaseTable from '@/components/BaseTable.vue'
 import PracticeSettingDialog from '@/components/word/PracticeSettingDialog.vue'
 import WordItem from '@/components/word/WordItem.vue'
+import { applyFetchedDictResource, resolveLastLearnIndex } from '@/core/composables/dictResourceLoad'
 import { flushStatToStore, usePracticeWordPersistence } from '@/core/composables/usePracticePersistence'
 import { DICT_LIST, LIB_JS_URL, TourConfig } from '@/core/config/env.ts'
 import { getCurrentStudyWord } from '@/core/hooks/dict.ts'
@@ -31,6 +38,8 @@ import {
   _nextTick,
   convertToWord,
   ensureCustomDictCopy,
+  isDictIdMatch,
+  isSameDictResource,
   isMobile,
   loadJsLib,
   resourceWrap,
@@ -71,13 +80,13 @@ const getDefaultFormWord = () => {
 }
 let isOperate = $ref(false)
 let wordForm = $ref(getDefaultFormWord())
-let wordFormRef = $ref()
+let wordFormRef = $ref<FormType>()
 const wordRules = reactive({
   word: [
     { required: true, message: '请输入单词', trigger: 'blur' },
     { max: 100, message: '名称不能超过100个字符', trigger: 'blur' },
   ],
-})
+}) as FormRules
 let studyLoading = $ref(false)
 let officialWordSnapshot = $ref<Word | null>(null)
 let wordSearchLoading = $ref(false)
@@ -133,12 +142,18 @@ async function searchOfficialWord() {
     Toast.warning('请输入单词')
     return
   }
+  const runtime = useRuntimeConfig().public
+  if (runtime.isDesktop && !isDesktopWordQueryEnabled(runtime.desktopApiBase)) {
+    officialWordSnapshot = null
+    Toast.warning(DESKTOP_WORD_QUERY_DISABLED_MESSAGE)
+    return
+  }
   wordSearchLoading = true
   try {
     const res = await queryWord({ word })
     if (!res.success || !res.data) {
       officialWordSnapshot = null
-      Toast.warning('单词未收录')
+      Toast.warning(res.code === 503 ? res.msg || DESKTOP_WORD_QUERY_DISABLED_MESSAGE : '单词未收录')
       return
     }
     const normalized = normalizeApiWord(res.data)
@@ -154,17 +169,19 @@ async function searchOfficialWord() {
 
 function syncDictInMyStudyList(study = false) {
   _nextTick(() => {
-    const originalId = runtimeStore.editDict.id
-
-    runtimeStore.editDict.words = allList
-    let temp = ensureCustomDictCopy(runtimeStore.editDict)
-    let rIndex = base.word.bookList.findIndex(v => v.id === originalId)
-    temp.length = temp.words.length
-    runtimeStore.editDict = temp
+    const leftover = runtimeStore.editDict
+    leftover.words = allList
+    leftover.length = allList.length
+    let rIndex = base.word.bookList.findIndex(v => isDictIdMatch(v, leftover.id))
     if (rIndex > -1) {
-      base.word.bookList[rIndex] = getDefaultDict(temp)
+      const target = base.word.bookList[rIndex]
+      target.words = leftover.words
+      target.length = leftover.length
       if (study) base.word.studyIndex = rIndex
     } else {
+      const temp = leftover.system ? leftover : ensureCustomDictCopy(leftover)
+      temp.length = temp.words.length
+      runtimeStore.editDict = temp
       base.word.bookList.push(getDefaultDict(temp))
       if (study) base.word.studyIndex = base.word.bookList.length - 1
     }
@@ -174,7 +191,7 @@ function syncDictInMyStudyList(study = false) {
 
 async function onSubmitWord() {
   // return console.log('wordFormRef',wordFormRef,wordFormRef.validate)
-  await wordFormRef.validate(valid => {
+  await wordFormRef?.validate(valid => {
     if (valid) {
       let data: any = convertToWord(wordForm)
       data.custom = !officialWordSnapshot || !isSameWordContent(data, officialWordSnapshot)
@@ -214,7 +231,7 @@ async function onSubmitWord() {
   })
 }
 
-async function batchDel(ids: string[]) {
+async function batchDel(ids: Array<string | number>) {
   let localHandle = () => {
     ids.map(id => {
       let rIndex2 = allList.findIndex(v => v.id === id)
@@ -304,22 +321,21 @@ onMounted(async () => {
         loading = true
         let dictList = await fetch(resourceWrap(DICT_LIST.WORD.ALL)).then(r => r.json())
         let dict = await _getDictDataByUrl(runtimeStore.editDict)
-        let r = dictList.find(v => [v.enName, v.id].includes(runtimeStore.editDict.id))
+        const leftover = runtimeStore.editDict
+        let r = (Array.isArray(dictList) ? dictList.flat() : []).find(v => isDictIdMatch(v, leftover.id))
         if (r) {
-          runtimeStore.editDict.words = dict.words
-          runtimeStore.editDict.id = r.id
-          runtimeStore.editDict.enName = r.enName
-          runtimeStore.editDict.cover = r.cover
-          runtimeStore.editDict.category = r.category
-          runtimeStore.editDict.tags = r.tags
-          runtimeStore.editDict.url = r.url
-          runtimeStore.editDict.description = r.description
-          runtimeStore.editDict.name = r.name
-        } else {
-          runtimeStore.editDict = dict
+          leftover.id = r.id
+          leftover.enName = r.enName
+          leftover.cover = r.cover
+          leftover.category = r.category
+          leftover.tags = r.tags
+          leftover.url = r.url
+          leftover.description = r.description
+          leftover.name = r.name
         }
-        runtimeStore.editDict.length = dict.words.length
+        applyFetchedDictResource(leftover, dict)
       }
+      keepLeftoverLearnIndex(runtimeStore.editDict)
       loading = false
     }
   }
@@ -351,6 +367,12 @@ const store = useBaseStore()
 const settingStore = useSettingStore()
 const { nav } = useNav()
 
+function keepLeftoverLearnIndex(edit: Dict) {
+  const leftover = base.word.bookList.find((v: Dict) => isSameDictResource(v, edit))
+  if (!leftover) return
+  edit.lastLearnIndex = resolveLastLearnIndex(leftover)
+}
+
 //todo 可以和首页合并
 async function startPractice(query = {}) {
   // debugger
@@ -364,6 +386,7 @@ async function startPractice(query = {}) {
     flushStatToStore((cache as any)?.statStoreData)
     await wordPersistence.clear()
   }
+  keepLeftoverLearnIndex(runtimeStore.editDict)
   await base.changeDict(runtimeStore.editDict)
   window.umami?.track('startStudyWord', {
     name: store.sdict.name,
@@ -390,6 +413,7 @@ async function startTest() {
   if (![WordPracticeMode.Free, WordPracticeMode.System].includes(settingStore.wordPracticeMode)) {
     settingStore.wordPracticeMode = WordPracticeMode.System
   }
+  keepLeftoverLearnIndex(runtimeStore.editDict)
   await base.changeDict(runtimeStore.editDict)
   loading = false
   nav('words-test/' + store.sdict.id, {}, {})
@@ -562,7 +586,7 @@ defineRender(() => {
   return (
     <BasePage>
       {showBookDetail.value ? (
-        <div className="card mb-0 dict-detail-card flex flex-col">
+        <div class="card mb-0 dict-detail-card flex flex-col">
           <div class="dict-header flex justify-between items-center relative">
             <BackIcon class="dict-back z-2" />
             <div class="dict-title absolute page-title text-align-center w-full">{runtimeStore.editDict.name}</div>
@@ -579,9 +603,11 @@ defineRender(() => {
               <BaseButton loading={studyLoading || loading} type="info" onClick={startTest}>
                 {$t('test')}
               </BaseButton>
-              <BaseButton id="study" loading={studyLoading || loading} onClick={addMyStudyList}>
-                {$t('learn')}
-              </BaseButton>
+              <span id="study">
+                <BaseButton loading={studyLoading || loading} onClick={addMyStudyList}>
+                  {$t('learn')}
+                </BaseButton>
+              </span>
             </div>
           </div>
           {dict.description && (
@@ -612,7 +638,7 @@ defineRender(() => {
                 ref={tableRef}
                 class="h-full"
                 request={requestList}
-                onDel={batchDel}
+                onDel={ids => void batchDel(ids)}
                 onSort={onSort}
                 onAdd={addWord}
                 onImport={goImportPage}
@@ -626,12 +652,12 @@ defineRender(() => {
                 {val => (
                   <WordItem
                     showTransPop={false}
-                    onClick={() => editable && editWord(val.item)}
                     index={val.index}
                     showCollectIcon={false}
                     showMarkIcon={false}
-                    excludeDictId={runtimeStore.editDict.id}
+                    excludeDictId={String(runtimeStore.editDict.id)}
                     item={val.item}
+                    {...({ onClick: () => editable && editWord(val.item) } as Record<string, unknown>)}
                   >
                     {{
                       prefix: () => val.checkbox(val.item),
@@ -671,7 +697,7 @@ defineRender(() => {
                 </div>
                 <Form
                   class="flex-1 overflow-auto pr-2"
-                  ref={e => (wordFormRef = e)}
+                  ref={e => (wordFormRef = e as FormType)}
                   rules={wordRules}
                   model={wordForm}
                   label-width="7rem"
@@ -765,7 +791,7 @@ defineRender(() => {
       ) : (
         <div class="card mb-0 dict-detail-card">
           <div class="dict-header flex justify-between items-center relative">
-            <BackIcon class="dict-back z-2" onClick={formClose} />
+            <BackIcon class="dict-back z-2" {...({ onClick: formClose } as Record<string, unknown>)} />
             <div class="dict-title absolute page-title text-align-center w-full">
               {isAdd ? $t('create_dict') : $t('edit_dict')}
             </div>

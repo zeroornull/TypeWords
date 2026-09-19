@@ -129,7 +129,7 @@ export class Baidu extends Translator<BaiduConfig> {
     return [...Baidu.langMap.keys()];
   }
 
-  async textToSpeech(text: string, lang: Language): Promise<string> {
+  override async textToSpeech(text: string, lang: Language): Promise<string> {
     return `https://fanyi.baidu.com/gettts?${qs.stringify({
       lan: Baidu.langMap.get(lang !== "auto" ? lang : "zh-CN") || "zh",
       text,

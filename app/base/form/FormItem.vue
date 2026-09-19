@@ -1,5 +1,7 @@
 <script setup lang="tsx">
 import { inject, onMounted, ref, useSlots } from 'vue'
+import type { Ref } from 'vue'
+import type { FormModel } from './types'
 
 const props = defineProps({
   prop: String,
@@ -10,7 +12,7 @@ const value = ref('')
 let error = $ref('')
 
 // 拿到 form 的 model 和注册函数
-const formModel = inject<ref>('formModel')
+const formModel = inject<Ref<FormModel>>('formModel')!
 const registerField = inject<Function>('registerField')
 const formRules = inject('formRules', {})
 

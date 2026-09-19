@@ -31,6 +31,17 @@ function fixture() {
       if (name === '@/base') return { Toast: { warning() {} } }
       if (name === '../utils/eventBus') return { emitter: {} }
       if (name === '../stores' || name === '../utils') return {}
+      if (name === '../composables/imeCompositionGuard') {
+        const guardExports = {}
+        runInNewContext(ts.transpileModule(readFileSync(resolve(process.env.TYPEWORDS_TEST_ROOT || process.cwd(), 'app/core/composables/imeCompositionGuard.ts'), 'utf8'), {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        }).outputText, {
+          exports: guardExports,
+          module: { exports: guardExports },
+          require() { throw new Error('imeCompositionGuard must stay dependency-free') },
+        })
+        return guardExports
+      }
       throw new Error(`Unexpected dependency: ${name}`)
     },
   })

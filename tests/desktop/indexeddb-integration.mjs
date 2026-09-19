@@ -17,6 +17,7 @@ const transpile = path =>
   }).outputText
 const modules = {
   persistence: transpile('app/core/composables/useDataSyncPersistence.ts'),
+  dictResourceLoad: transpile('app/core/composables/dictResourceLoad.ts'),
   account: transpile('app/core/platform/accountSync.ts'),
   accountPersistence: transpile('app/core/platform/accountPersistence.ts'),
   validation: transpile('app/core/composables/remotePracticeValidation.ts'),

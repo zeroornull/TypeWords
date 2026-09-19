@@ -274,6 +274,30 @@ test('ZIP accepts legacy full-word and compact caches without timer or session f
   }
 })
 
+test('ZIP rejects empty PracticeSaveWord object that dest used to export', async () => {
+  const h = harness()
+  h.backup.val.PracticeSaveWord = { version: 2, val: {} }
+  await assert.rejects(
+    h.prepareBackupImport(JSON.stringify(h.backup), h.audio),
+    /Invalid backup practice cache: PracticeSaveWord/
+  )
+  assert.deepEqual(h.events, [])
+})
+
+test('ZIP accepts dest leftover article 6/0/3 with a null word-cache envelope', async () => {
+  const h = harness()
+  h.backup.val.PracticeSaveWord = { version: 2, val: null }
+  h.backup.val.PracticeSaveArticle.val.practiceData = { sectionIndex: 6, sentenceIndex: 0, wordIndex: 3 }
+  const result = await h.prepareBackupImport(JSON.stringify(h.backup), h.audio)
+  assert.equal(result.PracticeSaveWord.val, null)
+  assert.deepEqual(JSON.parse(JSON.stringify(result.PracticeSaveArticle.val.practiceData)), {
+    sectionIndex: 6,
+    sentenceIndex: 0,
+    wordIndex: 3,
+  })
+  assert.deepEqual(h.events, ['dict', 'setting', 'word'])
+})
+
 test('ZIP preserves absent, null-envelope and null-payload cache compatibility', async () => {
   for (const state of ['absent', 'null', 'null-payload', 'tasks-only']) {
     const h = harness()

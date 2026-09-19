@@ -19,7 +19,7 @@ let wordPracticeMode = $computed(() => WordPracticeModeNameMap[props.wordPractic
 
 const store = useBaseStore()
 const settingStore = useSettingStore()
-const model = defineModel()
+const model = defineModel({ default: false })
 
 let num = $ref(0)
 let startNo = $ref(1)
@@ -56,8 +56,8 @@ function getDefaultTotal(total: number) {
 
 function setDefaultRange() {
   startNo = progressNo > 0 ? 1 : wordCount > 0 ? 1 : 0
-  endNo = progressNo
-  num = getDefaultTotal(rangeWordCount)
+  endNo = Number(progressNo)
+  num = getDefaultTotal(Number(rangeWordCount))
 }
 
 function setRawRange(start: number, end: number) {
@@ -122,7 +122,7 @@ function syncTotalWithRange() {
   if (!num) {
     num = getDefaultTotal(rangeWordCount)
   } else if (num > rangeWordCount) {
-    num = rangeWordCount
+    num = Number(rangeWordCount)
   } else if (num < 1) {
     num = 1
   }

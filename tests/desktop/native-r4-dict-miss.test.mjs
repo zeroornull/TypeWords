@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import test from 'node:test'
+
+const root = resolve(process.env.TYPEWORDS_TEST_ROOT || process.cwd())
+
+test('r4 dest listen/page proof on 99948E67 is pre-leftover-fix honesty-only and does not close T05 human-ear or T04 NIC-off', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-r4-dict-miss.mjs'), 'utf8')
+  assert.match(runner, /Honesty-only T05\/R4 dest lock/)
+  assert.match(runner, /Do not rematrix dest/)
+  assert.match(runner, /Do not add dest UI/)
+  assert.match(runner, /99948E67C19B6C66501AE23D4DA643D31D4EE46B358F9063E5A9AFE972D77D72/)
+  assert.match(runner, /pre-leftover-fix/)
+  assert.match(runner, /does not contain leftover-fix/)
+  assert.match(runner, /isDictIdMatch/)
+  assert.match(runner, /Dest proof does not close T05 human-ear/)
+  assert.match(runner, /Human-ear remains user-blocked/)
+  assert.match(runner, /Dest proof does not close T04 NIC-off/)
+  assert.match(runner, /Ethernet-off remains user-blocked/)
+  assert.match(runner, /route\.fulfill/)
+  assert.doesNotMatch(runner, /Disable-NetAdapter/)
+  assert.doesNotMatch(runner, /Get-NetTCPConnection/)
+})
+
+test('r4 dict-miss runner isolates dest, toasts first-run vs corrupt, and restores leftover', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-r4-dict-miss.mjs'), 'utf8')
+  assert.match(runner, /isolated-profile/)
+  assert.match(runner, /createHash\('sha256'\)\.update\(readFileSync\(launch\.exe\)\)/)
+  assert.match(runner, /TYPEWORDS_PLAYWRIGHT_MODULE/)
+  assert.match(runner, /Never included in the default Node suite/)
+  assert.match(runner, /native-r4-dict-miss\.json/)
+  assert.match(runner, /词库资源无法加载，已使用空词表继续/)
+  assert.match(runner, /本地词书数据无法读取/)
+  assert.match(runner, /本地设置无法读取/)
+  assert.match(runner, /waitForToast\(CORRUPT_DICT\)/)
+  assert.match(runner, /waitForToast\(CORRUPT_SETTING\)/)
+  assert.match(runner, /First-run toasted dict corrupt/)
+  assert.match(runner, /baseline\.volume, 37/)
+  assert.match(runner, /restored\.volume, 37/)
+  assert.match(runner, /ZIP semantic round-trip/)
+  assert.match(runner, /baseline\.audioBytes, 2943/)
+  assert.match(runner, /restored\.audioBytes, 2943/)
+  assert.match(runner, /restoreStores\(snapshot\)/)
+  assert.match(runner, /setting\?index=5/)
+  assert.doesNotMatch(runner, /LOCALAPPDATA/)
+  assert.doesNotMatch(runner, /Get-NetTCPConnection/)
+  assert.doesNotMatch(runner, /Disable-NetAdapter/)
+})
+
+test('r4 dict-miss runner uses fulfill-404 for CET-4 URL miss and does not hang', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-r4-dict-miss.mjs'), 'utf8')
+  assert.match(runner, /dicts\/en\/word\/CET4_T\.json/)
+  assert.match(runner, /route\.fulfill/)
+  assert.match(runner, /status: 404/)
+  assert.match(runner, /practice-words\/1/)
+  assert.match(runner, /waitForToast\(DICT_MISS/)
+  assert.match(runner, /missElapsedMs < 12000/)
+  assert.match(runner, /page\.unroute\('\*\*\/dicts\/en\/word\/CET4_T\.json'\)/)
+  assert.doesNotMatch(runner, /route\.abort/)
+  assert.doesNotMatch(runner, /Get-NetTCPConnection/)
+  assert.doesNotMatch(runner, /Disable-NetAdapter/)
+})

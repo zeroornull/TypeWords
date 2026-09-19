@@ -160,6 +160,21 @@ function harness(options = {}) {
       },
       CompareResult: { RemoteNewer: 'remote', LocalNewer: 'local', NoRemote: 'none' },
     },
+    './dictResourceLoad': (() => {
+      const exports = {}
+      runInNewContext(
+        ts.transpileModule(readFileSync(resolve(root, 'app/core/composables/dictResourceLoad.ts'), 'utf8'), {
+          compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+        }).outputText,
+        {
+          exports,
+          require() {
+            throw new Error('dictResourceLoad must stay dependency-free')
+          },
+        }
+      )
+      return exports
+    })(),
     '../utils': {
       _getDictDataByUrl: () => {
         events.push('hydrate')
@@ -941,6 +956,51 @@ for (const quota of [false, true]) {
     if (!quota) assert.ok(h.events.indexOf('hydrate') > h.events.indexOf('commit'))
   })
 }
+
+test('hydrate leftover official dest empty miss does not replace dest book', async () => {
+  const leftover = {
+    id: '1',
+    enName: 'cet4',
+    words: [],
+    articles: [],
+    lastLearnIndex: 20,
+    length: 2607,
+    custom: false,
+    system: false,
+  }
+  const h = harness({
+    resource: Promise.resolve({ id: '', words: [], lastLearnIndex: 0, length: 0 }),
+  })
+  h.rows[0].data.word = {
+    studyIndex: 3,
+    bookList: [{ words: [], articles: [] }, { words: [], articles: [] }, { words: [], articles: [] }, leftover],
+  }
+  assert.equal(await h.api.pullAllRemoteToLocal(), true)
+  await new Promise(resolve => setImmediate(resolve))
+  const dest = h.base.word.bookList[3]
+  assert.equal(dest.id, '1')
+  assert.equal(dest.lastLearnIndex, 20)
+  assert.equal(dest.length, 2607)
+  assert.deepEqual(dest.words, [])
+  const idMatch = {}
+  const utils = readFileSync(resolve(root, 'app/core/utils/index.ts'), 'utf8')
+  const file = ts.createSourceFile('utils.ts', utils, ts.ScriptTarget.Latest, true)
+  runInNewContext(
+    ts.transpileModule(
+      ['normalizeDictId', 'getDictIdentityList', 'isDictIdMatch']
+        .map(name => {
+          const node = file.statements.find(n => ts.isFunctionDeclaration(n) && n.name?.text === name)
+          assert.ok(node, `missing ${name}`)
+          return node.getText(file).replace(/^export /, '')
+        })
+        .join('\n'),
+      { compilerOptions: { target: ts.ScriptTarget.ES2022 } }
+    ).outputText,
+    idMatch
+  )
+  assert.equal(dest.id === 1, false)
+  assert.equal(idMatch.isDictIdMatch(dest, 1), true)
+})
 
 test('a pending dictionary resource cannot overwrite a subsequently replaced state', async () => {
   let finish

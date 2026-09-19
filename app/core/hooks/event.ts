@@ -1,4 +1,5 @@
 import {onDeactivated, onMounted, onUnmounted, watch, type WatchSource} from 'vue'
+import {createImeCompositionGuard, isImeComposingKey} from '../composables/imeCompositionGuard'
 import {emitter, EventKey} from '../utils/eventBus'
 import {useSettingStore} from '../stores'
 import {isMobile} from '../utils'
@@ -145,7 +146,7 @@ export function useEventListener(type: string, listener: EventListenerOrEventLis
       }
 
       const hiddenInput = ensureMobileInput()
-      let isComposing = false
+      const imeGuard = createImeCompositionGuard()
 
       const createSyntheticEvent = (payload: { key: string; code?: string; keyCode: number }) => {
         const base = {
@@ -171,49 +172,50 @@ export function useEventListener(type: string, listener: EventListenerOrEventLis
         invokeListener(createSyntheticEvent(payload))
       }
 
-      const handleCompositionStart = () => {
-        // console.log('handleCompositionStart',Date.now())
-        isComposing = true
-        Toast.warning('请切换到英文输入')
-      }
-
-      const handleCompositionEnd = (event: CompositionEvent) => {
-        isComposing = false
-        if (!event.data) {
-          hiddenInput.value = ' '
-          return
-        }
-        for (const char of event.data) {
-          const keyCode = char === ' ' ? 32 : char.toUpperCase().charCodeAt(0)
+      const dispatchCommitKeys = (keys: string[]) => {
+        for (const char of keys) {
+          const keyCode = char === 'Backspace' ? 8 : char === ' ' ? 32 : char.toUpperCase().charCodeAt(0)
           dispatchSyntheticKey({
             key: char,
             code: charToCode(char),
             keyCode,
           })
         }
+      }
+
+      const handleCompositionStart = (event: CompositionEvent) => {
+        imeGuard.onComposition({ type: 'compositionstart', data: event.data })
+        Toast.warning('请切换到英文输入')
+      }
+
+      const handleCompositionUpdate = (event: CompositionEvent) => {
+        imeGuard.onComposition({ type: 'compositionupdate', data: event.data })
+      }
+
+      const handleCompositionEnd = (event: CompositionEvent) => {
+        const {keys} = imeGuard.onComposition({ type: 'compositionend', data: event.data })
+        if (!keys.length) {
+          hiddenInput.value = ' '
+          return
+        }
+        dispatchCommitKeys(keys)
         hiddenInput.value = ' '
       }
 
       const handleInput = (event: InputEvent) => {
-        // console.log('handleInput',event,Date.now())
-        if (isComposing) return
         const target = event.target as HTMLInputElement | null
         if (!target) return
-        let char = ''
-        let keyCode = -1
-        if (event.inputType === 'deleteContentBackward') {
-          char = 'Backspace'
-          keyCode = 8
-        } else {
-          char = target.value.slice(-1) || event.data?.slice(-1) || ''
-          if (!char) return
-          keyCode = char === ' ' ? 32 : char.toUpperCase().charCodeAt(0)
-        }
+        const {keys} = imeGuard.onInput({
+          inputType: event.inputType,
+          data: event.data,
+          value: target.value,
+        })
+        if (!keys.length) return
+        const char = keys[0]
         if (emitWindowsKeys.has(char)) return
-        // console.log('handleInput', Date.now(), emitWindowsKeys)
         emitInputKeys.add(char)
         setTimeout(() => emitInputKeys.delete(char), 30)
-        dispatchSyntheticKey({ key: char, code: charToCode(char), keyCode })
+        dispatchCommitKeys(keys)
         target.value = ' '
       }
 
@@ -234,10 +236,8 @@ export function useEventListener(type: string, listener: EventListenerOrEventLis
         // return
         // console.log('windowListener', Date.now(), e)
         // IME editing/confirmation keys belong to the composition, not the practice shortcuts.
-        if (e.isComposing || e.key === 'Process') {
-          // @ts-ignore
-          // e.key = CODE_TO_CHAR[e.code]
-          //todo 这里不能直接设置值，会报错，后续可以用合成事件优化
+        // Use the native event only (not imeGuard.phase) so a missing compositionend can recover.
+        if (isImeComposingKey(e) || e.isComposing || e.key === 'Process') {
           return
         }
         if (emitInputKeys.has(e.key)) return
@@ -249,6 +249,9 @@ export function useEventListener(type: string, listener: EventListenerOrEventLis
 
       hiddenInput.addEventListener('compositionstart', handleCompositionStart)
       registerCleanup(() => hiddenInput.removeEventListener('compositionstart', handleCompositionStart))
+
+      hiddenInput.addEventListener('compositionupdate', handleCompositionUpdate)
+      registerCleanup(() => hiddenInput.removeEventListener('compositionupdate', handleCompositionUpdate))
 
       hiddenInput.addEventListener('compositionend', handleCompositionEnd)
       registerCleanup(() => hiddenInput.removeEventListener('compositionend', handleCompositionEnd))

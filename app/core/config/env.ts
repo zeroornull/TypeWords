@@ -174,8 +174,9 @@ export const WordPracticeModeStageMap: Record<WordPracticeMode, WordPracticeStag
     WordPracticeStage.DictationReview,
     WordPracticeStage.Complete,
   ],
-  [WordPracticeMode.ShuffleWordsTest]: null,
-  [WordPracticeMode.ReviewWordsTest]: null,
+  [WordPracticeMode.ShuffleWordsTest]: [],
+  [WordPracticeMode.ReviewWordsTest]: [],
+  [WordPracticeMode.Custom]: [],
 }
 export const WordPracticeStageNameMap: Record<WordPracticeStage, string> = {
   [WordPracticeStage.FollowWriteNewWord]: '跟写新词',

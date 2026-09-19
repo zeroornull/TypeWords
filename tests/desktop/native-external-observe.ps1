@@ -13,8 +13,16 @@ $ErrorActionPreference = 'Stop'
 $uri = [Uri]$Url
 $needle = $uri.AbsoluteUri
 $markers = New-Object System.Collections.Generic.List[string]
-foreach ($item in @($uri.Host, $uri.AbsolutePath.Trim('/'), $needle, 'zyronon/TypeWords', 'github.com/zyronon/TypeWords')) {
+foreach ($item in @($uri.Host, $uri.AbsolutePath.Trim('/'), $needle)) {
     if (-not [string]::IsNullOrWhiteSpace($item)) { [void]$markers.Add($item) }
+}
+if ($uri.Host -match '(^|\.)github\.com$') {
+    foreach ($item in @('zyronon/TypeWords', 'github.com/zyronon/TypeWords')) { [void]$markers.Add($item) }
+}
+if ($uri.Scheme -eq 'file') {
+    foreach ($item in @($uri.LocalPath, [IO.Path]::GetFileName($uri.LocalPath))) {
+        if (-not [string]::IsNullOrWhiteSpace($item)) { [void]$markers.Add($item) }
+    }
 }
 if ($uri.Host -match 'wjx\.cn') {
     foreach ($item in @('问卷星', '问卷', 'wjx.cn', 'v.wjx.cn', 'ev0W7fv')) { [void]$markers.Add($item) }
@@ -32,11 +40,31 @@ if ($uri.Host -match 'enpuz\.com') {
     foreach ($item in @('enpuz', 'Enpuz', '英语语法', '语法分析', '在线英语')) { [void]$markers.Add($item) }
 }
 if ($uri.Host -match 'v8l\.cn') {
-    foreach ($item in @('v8l', 'TG3sgVg')) { [void]$markers.Add($item) }
+    foreach ($item in @('v8l', 'TG3sgVg', '蓝奏', 'lanzou')) { [void]$markers.Add($item) }
+}
+if ($uri.Host -match 'kdocs\.cn') {
+    foreach ($item in @('kdocs', '金山文档', 'WPS', 'ciNZFKZHCpE2', '金山', '微信群二维码')) { [void]$markers.Add($item) }
+}
+if ($uri.Host -match 'chromewebstore\.google\.com') {
+    foreach ($item in @('Chrome Web Store', 'Chrome 网上应用店', 'One Click', 'Extensions', 'pbgjpgbpljobkekbhnnmlikbbfhbhmem', '扩展')) { [void]$markers.Add($item) }
+}
+if ($uri.Host -match 'microsoftedge\.microsoft\.com') {
+    foreach ($item in @('Microsoft Edge', 'Add-ons', 'Addons', '加载项', '快捷扩展', '扩展管理', 'jdodenbllldnoogfmbmmgpieafbnaogm')) { [void]$markers.Add($item) }
+}
+if ($uri.Host -match '(^|\.)x\.com$') {
+    foreach ($item in @('typewords2', 'twitter', 'Twitter', 'Log in to X')) { [void]$markers.Add($item) }
+}
+if ($uri.Scheme -eq 'mailto') {
+    foreach ($item in @('zyronon@163.com', '163.com', 'mailto', 'Outlook', '邮件', 'Mail')) { [void]$markers.Add($item) }
 }
 $httpsProgId = $null
+$mailtoProgId = $null
+$beforeMailPids = @{}
 try {
     $httpsProgId = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice').ProgId
+} catch {}
+try {
+    $mailtoProgId = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\mailto\UserChoice').ProgId
 } catch {}
 
 function Test-UrlMarker([string] $Text) {
@@ -49,14 +77,25 @@ function Test-UrlMarker([string] $Text) {
 
 function Get-BrowserProcesses {
     $found = New-Object System.Collections.Generic.List[object]
+    $namePattern = if ($uri.Scheme -eq 'mailto') {
+        '^(chrome|msedge|firefox|brave|opera|iexplore|outlook|olk|thunderbird|hxoutlook|winmail|hxoutlook|applicationframehost)\.exe$'
+    } else {
+        '^(chrome|msedge|firefox|brave|opera|iexplore)\.exe$'
+    }
     foreach ($process in (Get-CimInstance Win32_Process)) {
-        if (-not $process.CommandLine) { continue }
-        if ($process.Name -notmatch '^(chrome|msedge|firefox|brave|opera|iexplore)\.exe$') { continue }
-        if (-not (Test-UrlMarker $process.CommandLine)) { continue }
+        if ($process.Name -notmatch $namePattern) { continue }
+        $command = [string]$process.CommandLine
+        $mailApp = $uri.Scheme -eq 'mailto' -and $process.Name -match '^(outlook|olk|thunderbird|hxoutlook|winmail|applicationframehost)\.exe$'
+        if ($mailApp) {
+            if ($beforeMailPids.ContainsKey([string]$process.ProcessId)) { continue }
+        } else {
+            if ([string]::IsNullOrWhiteSpace($command)) { continue }
+            if (-not (Test-UrlMarker $command)) { continue }
+        }
         $found.Add([pscustomobject]@{
             pid = $process.ProcessId
             name = $process.Name
-            commandLine = $process.CommandLine
+            commandLine = $command
         })
     }
     return ,$found.ToArray()
@@ -158,11 +197,19 @@ if ($Mode -eq 'Close') {
 $beforeWindowIds = @{}
 $beforeTabIds = @{}
 $beforeTabNames = @{}
+$beforeMailPids = @{}
 foreach ($window in (Get-TopWindows)) { $beforeWindowIds[[string]$window.runtimeId] = $true }
 foreach ($tab in (Get-BrowserTabs)) {
     $id = [string]$tab.runtimeId
     $beforeTabIds[$id] = $true
     $beforeTabNames[$id] = [string]$tab.name
+}
+if ($uri.Scheme -eq 'mailto') {
+    foreach ($process in (Get-CimInstance Win32_Process)) {
+        if ($process.Name -match '^(outlook|olk|thunderbird|hxoutlook|winmail|applicationframehost)\.exe$') {
+            $beforeMailPids[[string]$process.ProcessId] = $true
+        }
+    }
 }
 $processes = New-Object System.Collections.Generic.List[object]
 $newWindows = New-Object System.Collections.Generic.List[object]
@@ -186,12 +233,15 @@ function Get-ExistingMatches {
 
 function Write-Report {
     $chromeWindows = New-Object System.Collections.Generic.List[string]
+    $allWindows = New-Object System.Collections.Generic.List[string]
     foreach ($window in (Get-TopWindows)) {
+        [void]$allWindows.Add($window.name)
         if ($window.name -match 'Chrome|Edge|Firefox|Brave|Chromium') { [void]$chromeWindows.Add($window.name) }
     }
     Write-Json ([pscustomobject]@{
         url = $needle
         httpsProgId = $httpsProgId
+        mailtoProgId = $mailtoProgId
         uiaReady = $script:UiaReady
         uiaError = $script:UiaError
         processes = $processes.ToArray()
@@ -200,6 +250,7 @@ function Write-Report {
         retargetedTabs = $retargetedTabs.ToArray()
         existingMatches = Get-ExistingMatches
         chromeWindows = $chromeWindows.ToArray()
+        allWindows = $allWindows.ToArray()
     })
 }
 

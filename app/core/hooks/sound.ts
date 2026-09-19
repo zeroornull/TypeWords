@@ -142,7 +142,7 @@ export function usePlayCorrect() {
 }
 
 const activeWordPlayCountMap = new Map<string, number>()
-let resetWordPlayCountTimer = -1
+let resetWordPlayCountTimer: ReturnType<typeof setTimeout> | undefined
 
 export function resetActiveWordPlayCount(word: string) {
   if (!word) return

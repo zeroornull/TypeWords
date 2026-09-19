@@ -2,8 +2,14 @@
 # This workflow is a static/regression check on windows-latest.
 # It does not launch a native WebView.
 # It does not build or run an installer, EXE, or NSIS package.
-# It does not run typecheck and does not treat typecheck as passing
-# (typecheck-green is not claimed; baseline remains exit 2 / 62 diagnostics).
+# It runs pnpm run typecheck and requires typecheck-green
+# (exit 0 / 0 diagnostics). Historical baseline exit 2 / 62 is not
+# this workflow's typecheck gate. It does not run typecheck:baseline.
+# This file existing is not a GitHub-hosted Actions run.
+# Local P1-01 dual frontend build requires both pnpm run generate
+# and pnpm run desktop:frontend:build.
+# Hosted jobs do not run those commands.
+# This file existing is not official P1-01 complete.
 # It does not run test:desktop:clean-install or serial Web/Desktop frontend
 # builds; those stay a documented local replay because they copy a tree,
 # reinstall from the lockfile, and generate .nuxt/.output.
@@ -38,6 +44,8 @@ jobs:
           cache: pnpm
       - name: Install from lockfile
         run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
       - name: Desktop Node tests
         run: pnpm run test:desktop
       - name: Desktop resource audit

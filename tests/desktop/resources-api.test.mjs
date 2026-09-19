@@ -43,6 +43,7 @@ function http(config) {
       axios: { default: { create: () => instance } },
       '@/base': { Toast: { warning() {} } },
       '../config/env.ts': { ENV: { API: 'http://localhost/' } },
+      '../config/desktopOnlineFeatures.ts': evaluate('app/core/config/desktopOnlineFeatures.ts'),
     }
   )
   return { request: requestHandler, error: errorHandler }
@@ -140,6 +141,7 @@ test('real Axios adapter receives zero desktop requests when unconfigured', asyn
       axios: { default: axios },
       '@/base': { Toast: { warning: message => notices.push(message) } },
       '../config/env.ts': { ENV: { API: 'http://localhost/' } },
+      '../config/desktopOnlineFeatures.ts': evaluate('app/core/config/desktopOnlineFeatures.ts'),
     }
   )
   let calls = 0

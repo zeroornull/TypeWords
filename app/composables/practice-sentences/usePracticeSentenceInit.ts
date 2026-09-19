@@ -3,6 +3,7 @@ import { getDefaultDict } from '@/core/types/func.ts'
 import { parseSentence } from '@/core/hooks/article.ts'
 import { useBaseStore } from '@/core/stores/base.ts'
 import { DICT_LIST } from '@/core/config/env.ts'
+import { applyFetchedDictResource } from '@/core/composables/dictResourceLoad'
 import { _getDictDataByUrl, isDictIdMatch, resourceWrap } from '@/core/utils'
 import type { SentencePracticeItem, SentencePracticeSource } from './types.ts'
 
@@ -77,7 +78,7 @@ export function usePracticeSentenceInit() {
 
     if (!dict?.id) return getDefaultDict()
     if (!dict.custom) {
-      dict = await _getDictDataByUrl(dict)
+      applyFetchedDictResource(dict, await _getDictDataByUrl(dict))
     }
 
     if (dict?.id) {

@@ -6,6 +6,7 @@ import { _getDictDataByUrl, cloneDeep, isDictIdMatch, resourceWrap, shuffle } fr
 import { computed, onMounted, watch } from 'vue'
 import { DICT_LIST, DictId } from '../config/env.ts'
 import { useRuntimeStore } from '../stores/runtime.ts'
+import { needsOfficialArticleFetch, resolveArticleBookForEdit } from '../composables/articleBookLoad.ts'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
@@ -276,13 +277,13 @@ export function useGetDict() {
       if (!dict) dict = dict_list.flat().find(v => isDictIdMatch(v, dictId)) as Dict
     }
     if (dict && dict.id) {
-      if (!dict?.articles?.length && !dict?.custom && !dict?.system && !dict?.is_default) {
+      let loaded = dict
+      if (needsOfficialArticleFetch(dict)) {
         fetching = true
-        let r = await _getDictDataByUrl(dict, DictType.article)
-        runtimeStore.editDict = r
+        loaded = await _getDictDataByUrl(dict, DictType.article)
       }
-      if (store.article.bookList.find(book => book.id === runtimeStore.editDict.id)) {
-      }
+      const assigned = resolveArticleBookForEdit(dict, loaded)
+      if (assigned) runtimeStore.editDict = assigned
     } else {
       router.push('/articles')
     }

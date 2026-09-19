@@ -18,14 +18,16 @@ const sample = [
   "app/core/hooks/sound.ts(211,7): error TS2322: Type 'Timeout' is not assignable to type 'number'.",
 ].join('\n')
 
-test('trackable typecheck baseline freezes 62 diagnostics and exit 2 as failure', () => {
+test('trackable typecheck baseline freezes 0 diagnostics and exit 0 as pass', () => {
   const baseline = loadBaseline(baselinePath)
   assert.equal(baseline.schema, 'typewords-typecheck-baseline-v1')
-  assert.equal(baseline.expectedExit, 2)
-  assert.equal(baseline.count, 62)
-  assert.equal(baseline.diagnostics.length, 62)
+  assert.equal(baseline.expectedExit, 0)
+  assert.equal(baseline.count, 0)
+  assert.equal(baseline.diagnostics.length, 0)
+  assert.deepEqual(baseline.preamble, [])
   assert.ok(baseline.diagnostics.every(line => /error TS\d+:/.test(line)))
-  assert.match(baseline.note, /not a passing typecheck/i)
+  assert.match(baseline.note, /green typecheck baseline/i)
+  assert.match(baseline.source, /typecheck-batch97\.log/)
 })
 
 test('comparer treats line and column movement as the same diagnostic', () => {
@@ -56,12 +58,12 @@ test('reconstructed baseline headlines compare with no added or removed diagnost
     baseline,
     currentExit: baseline.expectedExit,
   })
-  assert.equal(result.baselineCount, 62)
-  assert.equal(result.currentCount, 62)
+  assert.equal(result.baselineCount, 0)
+  assert.equal(result.currentCount, 0)
   assert.deepEqual(result.added, [])
   assert.deepEqual(result.removed, [])
-  assert.equal(result.typecheckFailed, true)
-  assert.equal(result.typecheckPassed, false)
+  assert.equal(result.typecheckFailed, false)
+  assert.equal(result.typecheckPassed, true)
 })
 
 test('comparer CLI writes a baseline and fails only when diagnostics are added', () => {
@@ -97,6 +99,19 @@ test('comparer CLI writes a baseline and fails only when diagnostics are added',
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('drop-vue-router-volar-plugin removes only the missing vue-router Volar export', async () => {
+  const { dropMissingVueRouterVolarPlugin } = await import(
+    pathToFileURL(resolve(root, 'scripts/drop-vue-router-volar-plugin.mjs'))
+  )
+  const tsConfig = {
+    vueCompilerOptions: {
+      plugins: ['@vue-macros/nuxt/volar', 'vue-router/volar/sfc-route-blocks', { name: 'keep-me' }],
+    },
+  }
+  dropMissingVueRouterVolarPlugin(tsConfig)
+  assert.deepEqual(tsConfig.vueCompilerOptions.plugins, ['@vue-macros/nuxt/volar', { name: 'keep-me' }])
 })
 
 test('extract and difference helpers keep a multiset, not a unique set', () => {

@@ -49,6 +49,53 @@ export type PracticeArticleCache = {
   statStoreData: PracticeState
 }
 
+export type ArticlePracticeCursor = {
+  sectionIndex: number
+  sentenceIndex: number
+  wordIndex: number
+}
+
+type ArticleSentenceLike = { words?: ReadonlyArray<unknown> | null }
+
+const ORIGIN_ARTICLE_CURSOR: ArticlePracticeCursor = {
+  sectionIndex: 0,
+  sentenceIndex: 0,
+  wordIndex: 0,
+}
+
+function isUsableIndex(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0
+}
+
+/** Resume a leftover/mid-article cursor when it exists in this article; otherwise recover to origin. */
+export function resolveArticlePracticeCursor(
+  sections: ReadonlyArray<ReadonlyArray<ArticleSentenceLike | null | undefined> | null | undefined> | null | undefined,
+  cursor: Partial<ArticlePracticeCursor> | null | undefined
+): ArticlePracticeCursor & { resumed: boolean } {
+  const sectionIndex = cursor?.sectionIndex
+  const sentenceIndex = cursor?.sentenceIndex
+  const wordIndex = cursor?.wordIndex
+  if (
+    !Array.isArray(sections) ||
+    !isUsableIndex(sectionIndex) ||
+    !isUsableIndex(sentenceIndex) ||
+    !isUsableIndex(wordIndex)
+  ) {
+    return { ...ORIGIN_ARTICLE_CURSOR, resumed: false }
+  }
+  const words = sections[sectionIndex]?.[sentenceIndex]?.words
+  if (!Array.isArray(words) || wordIndex >= words.length) {
+    return { ...ORIGIN_ARTICLE_CURSOR, resumed: false }
+  }
+  return { sectionIndex, sentenceIndex, wordIndex, resumed: true }
+}
+
+/** ZIP/import already accept `val: null`; empty `{}` is not a valid practice cache. */
+export function exportablePracticeCacheVal<T extends object>(value: T | null | undefined): T | null {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null
+  return Object.keys(value).length > 0 ? value : null
+}
+
 export type LocalCacheResult<T> = { val: T; updated_at?: string; version: number }
 
 export type PracticeWordCacheUpgradeContext = {
@@ -152,11 +199,14 @@ export function resolveLegacyPracticeWordCursor(
 function toWordKeys(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value
-    .map(item => typeof item === 'string' ? item : (item as { word?: unknown })?.word)
+    .map(item => (typeof item === 'string' ? item : (item as { word?: unknown })?.word))
     .filter((word): word is string => typeof word === 'string' && word.length > 0)
 }
 
-function upgradePracticeWordCacheV1(value: unknown, context: PracticeWordCacheUpgradeContext): PracticeWordCacheV2Stored | null {
+function upgradePracticeWordCacheV1(
+  value: unknown,
+  context: PracticeWordCacheUpgradeContext
+): PracticeWordCacheV2Stored | null {
   if (!value || typeof value !== 'object') return null
   const raw = value as any
   const compact = 'taskWordsStr' in raw

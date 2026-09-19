@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Dict } from '@/core/types'
 import { DictType, getDefaultDict } from '@/core/types'
-import { cloneDeep, ensureCustomDictCopy } from '@/core/utils'
+import { cloneDeep, ensureCustomDictCopy, isDictIdMatch } from '@/core/utils'
 import { onMounted, reactive } from 'vue'
 import { useRuntimeStore } from '@/core/stores/runtime.ts'
 import { useBaseStore } from '@/core/stores/base.ts'
@@ -81,7 +81,7 @@ async function onSubmit() {
       } else {
         const originalId = data.id
         data = ensureCustomDictCopy(data)
-        let rIndex = source.bookList.findIndex(v => v.id === originalId)
+        let rIndex = source.bookList.findIndex(v => isDictIdMatch(v, originalId))
         runtimeStore.editDict = data
         if (rIndex > -1) {
           source.bookList[rIndex] = getDefaultDict(data)

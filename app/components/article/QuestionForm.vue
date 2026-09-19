@@ -41,14 +41,19 @@ import QuestionItem from './QuestionItem.vue'
 import { Toast } from '@/base'
 
 interface IProps {
-  questions: Array
-  duration: Number
-  immediateFeedback: Boolean
-  randomize: Boolean
+  questions?: Array<{
+    stem: string
+    options: unknown[]
+    correctAnswer: unknown[]
+    explanation?: string
+  }>
+  duration?: number
+  immediateFeedback?: boolean
+  randomize?: boolean
 }
 
 const props = withDefaults(defineProps<IProps>(), {
-  questions: [],
+  questions: () => [],
   duration: 300,
   immediateFeedback: false,
   randomize: false,
@@ -57,7 +62,7 @@ const props = withDefaults(defineProps<IProps>(), {
 const questionRefs = useTemplateRef('questionRefs1')
 const started = ref(false)
 const timeLeft = ref(props.duration || 300)
-let timer = null
+let timer: ReturnType<typeof setInterval> | null = null
 
 const startExam = () => {
   started.value = true

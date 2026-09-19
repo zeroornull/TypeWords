@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { checkAndUpgradeSaveSetting, cloneDeep, parseJsonStr } from '../utils'
 import { get, set } from 'idb-keyval'
+import { Toast } from '@/base'
+import { notifyLocalStoreRecovery, readLocalStoreRecord } from '../composables/localStoreRecovery'
 import { APP_VERSION, DefaultShortcutKeyMap, SAVE_SETTING_KEY } from '../config/env'
 import { IdentifyMethod, type SaveData, WordPracticeMode, WordPracticeType } from '../types'
 import type { FSRSParameters } from 'ts-fsrs'
@@ -173,27 +175,25 @@ export const useSettingStore = defineStore('setting', {
       this.$patch(obj)
     },
     async init(): Promise<SaveData | null> {
-      return new Promise(async resolve => {
-        try {
-          let jsonStr = await get(SAVE_SETTING_KEY.key)
-          if (jsonStr) {
-            let result = await parseJsonStr(jsonStr, checkAndUpgradeSaveSetting)
-
-            //如果升级了，那么要保持本地比线上新，不然会被覆盖
-            const shouldRefreshUpdatedAt = (result.val as any)?.__updateLocalData ?? false
-            delete (result.val as any)?.__updateLocalData
-            if (shouldRefreshUpdatedAt) {
-              await set(SAVE_SETTING_KEY.key, JSON.stringify(result))
-            }
-            this.setState(result.val)
-            resolve(result)
+      try {
+        const jsonStr = await get(SAVE_SETTING_KEY.key)
+        const loaded = await readLocalStoreRecord(jsonStr, raw => parseJsonStr(raw, checkAndUpgradeSaveSetting))
+        notifyLocalStoreRecovery(loaded.recovery, 'setting', Toast)
+        if (loaded.record) {
+          const shouldRefreshUpdatedAt = (loaded.record.val as any)?.__updateLocalData ?? false
+          delete (loaded.record.val as any)?.__updateLocalData
+          if (shouldRefreshUpdatedAt) {
+            await set(SAVE_SETTING_KEY.key, JSON.stringify(loaded.record))
           }
-          resolve(null)
-        } catch (e) {
-          console.error('读取本地设置数据失败', e)
-          resolve(null)
+          this.setState(loaded.record.val)
+          return loaded.record
         }
-      })
+        return null
+      } catch (e) {
+        console.error('读取本地设置数据失败', e)
+        notifyLocalStoreRecovery('corrupt', 'setting', Toast)
+        return null
+      }
     },
   },
 })

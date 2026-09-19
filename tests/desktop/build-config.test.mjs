@@ -25,6 +25,9 @@ function config(env = {}, raw = false, exit = () => {}) {
       if (name === 'pathe' || name === 'node:path') return { resolve }
       if (name === 'child_process') return { execSync: () => 'fixture' }
       if (name === 'nuxt/config') return { defineNuxtConfig: value => value }
+      if (name === 'unplugin-vue-components/vite') {
+        return { default: options => ({ name: 'unplugin-vue-components', options }) }
+      }
       return { default: () => ({}) }
     },
   })
@@ -131,6 +134,24 @@ test('Desktop API is explicitly configured independently from Web API_BASE', () 
     config({ TYPEWORDS_DESKTOP_API_BASE: 'https://api.example.test/' }).runtimeConfig.public.desktopApiBase,
     ''
   )
+})
+
+test('Typecheck config drops the missing vue-router Volar plugin module', () => {
+  assert.ok(config().modules.includes('./scripts/drop-vue-router-volar-plugin.mjs'))
+  assert.ok(config({ TYPEWORDS_TARGET: 'desktop' }).modules.includes('./scripts/drop-vue-router-volar-plugin.mjs'))
+})
+
+function vueComponentsPlugin(env) {
+  return config(env).vite.plugins.find(plugin => plugin?.name === 'unplugin-vue-components')
+}
+
+test('Desktop generate disables unplugin-vue-components dts so it does not open app/components.d.ts', () => {
+  const source = readFileSync(resolve(root, 'nuxt.config.ts'), 'utf8')
+  assert.match(source, /dts:\s*!isDesktop/)
+  const desktop = vueComponentsPlugin({ TYPEWORDS_TARGET: 'desktop' })
+  const web = vueComponentsPlugin({})
+  assert.equal(desktop.options.dts, false)
+  assert.equal(web.options.dts, true)
 })
 
 test('Desktop watcher ignores Rust build output without changing Web watcher configuration', () => {

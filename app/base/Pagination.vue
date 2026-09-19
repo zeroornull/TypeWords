@@ -154,7 +154,7 @@ function next() {
 
       <!-- 每页条数选择器 -->
       <div v-if="layout.includes('sizes')" class="sizes">
-        <select :value="internalPageSize" @change="handleSizeChange(Number($event.target.value))">
+        <select :value="internalPageSize" @change="handleSizeChange(Number(($event.target as HTMLSelectElement).value))">
           <option v-for="item in pageSizes" :key="item" :value="item">{{ item }}{{ $t('items_per_page') }}</option>
         </select>
       </div>

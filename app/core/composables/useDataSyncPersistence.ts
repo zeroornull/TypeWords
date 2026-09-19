@@ -39,6 +39,7 @@ import { nextTick, toRaw } from 'vue'
 import { RemoteDataValidationError, validateRemotePracticeCache } from './remotePracticeValidation'
 import { validateStoredSettings } from './settingsValidation'
 import { validateStoredDictionary } from './dictionaryValidation'
+import { applyFetchedDictResource } from './dictResourceLoad'
 import type { AccountSync, AccountSyncScope } from '../platform/accountSync'
 import { setManyForAccount } from '../platform/accountPersistence'
 
@@ -168,7 +169,7 @@ function hydrateDictData(store: ReturnType<typeof useBaseStore>, scope?: Account
       _getDictDataByUrl(dict)
         .then(r => {
           scope?.assertCurrent()
-          if (store.word === word && word.bookList[index] === dict) word.bookList[index] = r
+          if (store.word === word && word.bookList[index] === dict) applyFetchedDictResource(dict, r)
         })
         .catch(error => console.warn('Remote dictionary resource load failed', error))
     }
@@ -180,7 +181,7 @@ function hydrateDictData(store: ReturnType<typeof useBaseStore>, scope?: Account
       _getDictDataByUrl(book, DictType.article)
         .then(r => {
           scope?.assertCurrent()
-          if (store.article === article && article.bookList[index] === book) article.bookList[index] = r
+          if (store.article === article && article.bookList[index] === book) applyFetchedDictResource(book, r)
         })
         .catch(error => console.warn('Remote article resource load failed', error))
     }

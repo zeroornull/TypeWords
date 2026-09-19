@@ -19,7 +19,7 @@
         :value="displayValue"
         :disabled="disabled"
         inputmode="decimal"
-        @input="e => displayValue = e.target.value"
+        @input="e => displayValue = (e.target as HTMLInputElement).value"
         @keydown.up.prevent="change(1)"
         @keydown.down.prevent="change(-1)"
         @blur="onBlur"

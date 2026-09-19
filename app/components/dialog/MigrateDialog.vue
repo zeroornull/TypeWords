@@ -6,7 +6,7 @@ import { defineAsyncComponent } from 'vue'
 
 const Dialog = defineAsyncComponent(() => import('@/base/dialog/Dialog.vue'))
 
-const model = defineModel()
+const model = defineModel({ default: false })
 
 const emit = defineEmits<{ ok: [] }>()
 

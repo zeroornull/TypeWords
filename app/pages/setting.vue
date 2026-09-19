@@ -424,7 +424,7 @@ let sbFormRules = {
 //能否使用同步数据功能,如果有自定义的文章里面有音频，则不可以
 const canSyncToServe = $computed(() => {
   //筛选自定义和收藏
-  let bookList = store.article.bookList.filter(v => v.custom || [DictId.articleCollect].includes(v.id))
+  let bookList = store.article.bookList.filter(v => v.custom || v.id === DictId.articleCollect)
   let audioFileIdList = []
   bookList.forEach(v => {
     //筛选 audioFileId 字体有值的

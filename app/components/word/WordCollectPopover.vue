@@ -71,8 +71,9 @@ async function confirmCreateDict() {
   const result = await createCustomDict(wordCollectPickerState.newDictName)
   creatingLoading = false
   if (!result.ok) {
-    if (result.reason === 'duplicate') Toast.warning($t('name_already_exists'))
-    else if (result.reason === 'api') Toast.error($t('add_failed'))
+    const reason = 'reason' in result ? result.reason : undefined
+    if (reason === 'duplicate') Toast.warning($t('name_already_exists'))
+    else if (reason === 'api') Toast.error($t('add_failed'))
     return
   }
   cancelCreating()

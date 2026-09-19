@@ -25,10 +25,12 @@ import {
   _nextTick,
   cloneDeep,
   ensureCustomDictCopy,
+  isDictIdMatch,
   msToMinute,
   resourceWrap,
   total,
 } from '@/core/utils'
+import { applyFetchedDictResource } from '@/core/composables/dictResourceLoad'
 import { getPracticeArticleCacheLocal } from '@/core/utils/cache.ts'
 import { usePracticeArticlePersistence } from '@/core/composables/usePracticePersistence'
 import { emitter, EventKey, useEvents } from '@/core/utils/eventBus'
@@ -114,13 +116,13 @@ async function init() {
   let dictId = route.params.id
   if (dictId) {
     //先在自己的词典列表里面找，如果没有再在资源列表里面找
-    dict = store.article.bookList.find(v => v.id == dictId)
+    dict = store.article.bookList.find(v => isDictIdMatch(v, dictId))
     let r = await fetch(resourceWrap(DICT_LIST.ARTICLE.ALL))
     let book_list = await r.json()
-    if (!dict) dict = book_list.find(v => v.id === dictId) as Dict
+    if (!dict) dict = book_list.find(v => isDictIdMatch(v, dictId)) as Dict
     if (dict && dict.id) {
       //如果是不是自定义词典，就请求数据
-      if (!dict.custom) dict = await _getDictDataByUrl(dict, DictType.article)
+      if (!dict.custom) applyFetchedDictResource(dict, await _getDictDataByUrl(dict, DictType.article))
       if (!dict.articles.length) {
         router.push('/articles')
         return Toast.warning('没有文章可学习！')
@@ -140,6 +142,7 @@ async function init() {
 const initAudio = () => {
   _nextTick(() => {
     if (import.meta.server) return
+    if (!audioRef) return
     audioRef.volume = settingStore.articleSoundVolume / 100
     audioRef.playbackRate = settingStore.articleSoundSpeed
   })
@@ -167,6 +170,13 @@ watch(
     initAudio()
   },
   { immediate: true, deep: true }
+)
+
+watch(
+  () => Boolean(audioRef),
+  mounted => {
+    if (mounted) initAudio()
+  }
 )
 
 //用于远程拉了新数据，被动更新当前文章

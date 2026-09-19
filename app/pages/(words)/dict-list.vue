@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { _nextTick, groupBy, isMobile, loadJsLib, resourceWrap, useNav } from '@/core/utils'
+import { _nextTick, groupBy, isDictIdMatch, isMobile, loadJsLib, resourceWrap, useNav } from '@/core/utils'
 import { BackIcon, BaseButton, BaseIcon, BaseInput, BasePage } from '@/base'
 import type { DictResource } from '@/core/types/types.ts'
 import { useRuntimeStore } from '@/core/stores/runtime.ts'
@@ -43,7 +43,7 @@ function groupByDictTags(dictList: DictResource[]) {
   }, {})
 }
 
-const { data: dict_list, isFetching } = useFetch(resourceWrap(DICT_LIST.WORD.ALL)).json()
+const { data: dict_list, isFetching } = useFetch(resourceWrap(DICT_LIST.WORD.ALL)).json<DictResource[]>()
 
 const groupedByCategoryAndTag = $computed(() => {
   let data = []
@@ -78,7 +78,7 @@ const searchList = computed<any[]>(() => {
 
 watch(dict_list, val => {
   if (!val.length) return
-  let cet4 = val.find(v => v.id === 1)
+  let cet4 = val.find(v => isDictIdMatch(v, 1))
   if (!cet4) return
   _nextTick(async () => {
     const Shepherd = await loadJsLib('Shepherd', LIB_JS_URL.SHEPHERD)
@@ -138,7 +138,7 @@ watch(dict_list, val => {
       <div class="w-full" v-else>
         <DictGroup
           v-for="item in groupedByCategoryAndTag"
-          :select-id="store.sdict.id"
+          :select-id="String(store.sdict.id)"
           @selectDict="selectDict"
           quantifier="词"
           :groupByTag="item[1]"

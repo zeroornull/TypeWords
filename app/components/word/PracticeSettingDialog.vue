@@ -4,6 +4,7 @@ import { BaseButton, InputNumber, Slider, Tooltip, Toast } from '@/base'
 import { defineAsyncComponent, watch } from 'vue'
 import { useSettingStore } from '@/core/stores/setting'
 import ChangeLastPracticeIndexDialog from './ChangeLastPracticeIndexDialog.vue'
+import { leftoverLearnIndexBound, resolveLastLearnIndex } from '@/core/composables/dictResourceLoad'
 import { useRuntimeStore } from '@/core/stores/runtime'
 import { BaseInput } from '@/base'
 
@@ -12,7 +13,7 @@ const Dialog = defineAsyncComponent(() => import('@/base/dialog/Dialog.vue'))
 const settings = useSettingStore()
 const runtimeStore = useRuntimeStore()
 
-const model = defineModel()
+const model = defineModel({ default: false })
 
 const props = defineProps<{
   showLeftOption: boolean
@@ -27,10 +28,11 @@ let show = $ref(false)
 let tempPerDayStudyNumber = $ref(0)
 let tempWordReviewRatio = $ref(0)
 let tempLastLearnIndex = $ref(0)
+const lastLearnIndexBound = $computed(() => leftoverLearnIndexBound(runtimeStore.editDict))
 
 async function changePerDayStudyNumber() {
   runtimeStore.editDict.perDayStudyNumber = Number(tempPerDayStudyNumber)
-  runtimeStore.editDict.lastLearnIndex = Number(tempLastLearnIndex)
+  runtimeStore.editDict.lastLearnIndex = resolveLastLearnIndex(runtimeStore.editDict, tempLastLearnIndex)
   settings.wordReviewRatio = tempWordReviewRatio
   return props?.onConfirm?.()
 }
@@ -41,8 +43,7 @@ watch(
     if (n) {
       if (runtimeStore.editDict.id) {
         tempPerDayStudyNumber = runtimeStore.editDict.perDayStudyNumber
-        tempLastLearnIndex = runtimeStore.editDict.lastLearnIndex
-        if (tempLastLearnIndex >= runtimeStore.editDict.length) tempLastLearnIndex = runtimeStore.editDict.length
+        tempLastLearnIndex = resolveLastLearnIndex(runtimeStore.editDict)
         tempWordReviewRatio = settings.wordReviewRatio
       } else {
         Toast.warning($t('please_select_dict'))
@@ -123,7 +124,7 @@ watch(
             :min="0"
             show-text
             class="my-1"
-            :max="runtimeStore.editDict.words.length"
+            :max="lastLearnIndexBound"
             v-model="tempLastLearnIndex"
           />
           <BaseButton @click="show = true">{{ $t('select_from_dict') }}</BaseButton>
@@ -135,7 +136,7 @@ watch(
     v-model="show"
     @ok="
       e => {
-        tempLastLearnIndex = e
+        tempLastLearnIndex = resolveLastLearnIndex(runtimeStore.editDict, e)
         show = false
       }
     "

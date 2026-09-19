@@ -98,6 +98,8 @@ test('External opener accepts existing HTTPS destinations and rejects scheme/hos
     'http://github.com/',
     'javascript:alert(1)',
     'file:///tmp/x',
+    'data:text/html,hello',
+    'ms-settings:display',
     'mailto:a@b.com',
     'mailto:zyronon@163.com?cc=evil@example.com',
     'https://github.com.evil.test/',
@@ -128,7 +130,10 @@ test('Native allowlist exactly matches client host validation; no broad filesyst
       ...Array.from(api.EXTERNAL_MAILS, mail => `mailto:${mail}`),
     ]
   )
-  assert.match(readFileSync(resolve(root, 'app/core/config/env.ts'), 'utf8'), new RegExp(`EMAIL = '${api.EXTERNAL_MAILS[0]}'`))
+  assert.match(
+    readFileSync(resolve(root, 'app/core/config/env.ts'), 'utf8'),
+    new RegExp(`EMAIL = '${api.EXTERNAL_MAILS[0]}'`)
+  )
 })
 
 test('Desktop anchors, middle-click and window.open use browser; internal links remain local', async () => {
@@ -181,6 +186,8 @@ test('Desktop anchors, middle-click and window.open use browser; internal links 
   assert.equal(click('https://github.com/zyronon/TypeWords', 'auxclick', 1).prevented, true)
   assert.equal(click('http://tauri.localhost/words').prevented, undefined)
   assert.equal(click('javascript:alert(1)').prevented, true)
+  assert.equal(click('data:text/html,hello').prevented, true)
+  assert.equal(click('ms-settings:display').prevented, true)
   assert.equal(win.open('https://enpuz.com/', '_blank'), null)
   win.open('https://evil.test/')
   win.open('/words')
@@ -190,7 +197,7 @@ test('Desktop anchors, middle-click and window.open use browser; internal links 
     'https://github.com/zyronon/TypeWords',
     'https://enpuz.com/',
   ])
-  assert.equal(errors.length, 2)
+  assert.equal(errors.length, 4)
   assert.deepEqual(assigned, ['http://tauri.localhost/words'])
   dispose()
   assert.equal(win.open, originalOpen)
@@ -238,6 +245,8 @@ test('Export consumer suppresses success on cancel/error and clears loading', as
         '../utils/cache': {
           PRACTICE_WORD_CACHE: { key: 'word', version: 1 },
           PRACTICE_ARTICLE_CACHE: { key: 'article', version: 1 },
+          exportablePracticeCacheVal: value =>
+            value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0 ? value : null,
         },
         '../composables/usePracticePersistence.ts': {
           usePracticeWordPersistence: () => ({ getLocalDataCompact: async () => ({}) }),

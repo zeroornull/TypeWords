@@ -228,14 +228,20 @@ export function usePracticeWordTyping(options: PracticeWordTypingOptions) {
     )
 
     if (wholeInputAttempt.value) {
+      const letterCorrect = isPracticeCharacterCorrect(letter, targetCharacter, settings.ignoreCase)
       input.value += letter
       wrong.value = ''
-      options.playKeyboardAudio()
+      if (letterCorrect) {
+        options.playKeyboardAudio()
+      } else {
+        options.playBeep()
+        typo()
+      }
       if (isWholePracticeInputComplete(input.value, target)) {
         if (isWholePracticeInputCorrect(input.value, target, settings.ignoreCase)) completeCurrentInput()
-        else {
+        else if (letterCorrect) {
           options.playBeep()
-          options.onPlay(WordPlayTrigger.Typo)
+          typo()
         }
       } else {
         inputLock.value = false

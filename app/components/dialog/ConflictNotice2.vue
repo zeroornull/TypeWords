@@ -7,7 +7,7 @@ import ConflictNoticeText from './ConflictNoticeText.vue'
 const Dialog = defineAsyncComponent(() => import('@/base/dialog/Dialog.vue'))
 
 let settingStore = useSettingStore()
-const model = defineModel()
+const model = defineModel({ default: false })
 
 useDisableEventListener(model)
 </script>

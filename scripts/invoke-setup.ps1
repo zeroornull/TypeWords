@@ -4,8 +4,19 @@ param(
     [string] $UninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TypeWords',
     [string] $ResultPath,
     [int] $TimeoutMs = 180000,
-    [switch] $DryRun
+    [switch] $DryRun,
+    [switch] $WithShortcuts
 )
+# Option 2 support-path wrapper. Raw silent NSIS /S /NS /D= still overwrites a
+# newer dest; allowDowngrades=false is insufficient. Compare Uninstall
+# DisplayVersion to TypeWords_<version>_x64-setup.exe as [version] (not string)
+# and exit 2 before launching NSIS. Isolated dest keeps /NS unless -WithShortcuts.
+# This is not an NSIS fix and not a signed-release claim.
+# Silent currentUser NSIS still FindProcessCurrentUser / KillProcessCurrentUser
+# typewords-desktop.exe by process name, not by /D= path. A second /D= is
+# not a safe leftover-preserving upgrade while dest is running: it would
+# kill leftover dest and rewrite HKCU Uninstall\TypeWords InstallLocation
+# to the new Dest. This wrapper does not skip that kill-by-name.
 $ErrorActionPreference = 'Stop'
 
 function ConvertTo-TypeWordsVersion([string] $Value) {
@@ -41,12 +52,15 @@ if (Test-Path -LiteralPath $UninstallKey) {
     $displayVersion = (Get-ItemProperty -LiteralPath $UninstallKey).DisplayVersion
 }
 
+$argumentList = if ($WithShortcuts) { "/S /D=$Dest" } else { "/S /NS /D=$Dest" }
 $record = [ordered]@{
     setup = $Setup
     dest = $Dest
     setupVersion = $setupVersion
     displayVersion = $displayVersion
     dryRun = [bool]$DryRun
+    withShortcuts = [bool]$WithShortcuts
+    argumentList = $argumentList
     refused = $false
     launched = $false
     reason = $null
@@ -68,7 +82,7 @@ if ($DryRun) {
     Write-TypeWordsSetupResult $record 0
 }
 
-$process = Start-Process -FilePath $Setup -ArgumentList "/S /NS /D=$Dest" -PassThru
+$process = Start-Process -FilePath $Setup -ArgumentList $argumentList -PassThru
 $record.launched = $true
 if (-not $process.WaitForExit($TimeoutMs)) {
     Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue

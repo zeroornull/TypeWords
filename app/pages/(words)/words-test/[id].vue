@@ -4,7 +4,8 @@ import { BaseButton, BasePage, Toast, VolumeIcon } from '@/base'
 import { useRoute, useRouter } from 'vue-router'
 import { useBaseStore } from '@/core/stores/base.ts'
 import type { Dict, Question, TaskWords, Word } from '@/core/types/types.ts'
-import { _getDictDataByUrl, shuffle, useNav } from '@/core/utils'
+import { applyFetchedDictResource } from '@/core/composables/dictResourceLoad'
+import { _getDictDataByUrl, isDictIdMatch, shuffle, useNav } from '@/core/utils'
 import { useRuntimeStore } from '@/core/stores/runtime.ts'
 import { usePlayBeep, usePlayCorrect, usePlayWordAudio } from '@/core/hooks/sound.ts'
 import { useEvents } from '@/core/utils/eventBus'
@@ -39,14 +40,13 @@ let no = $computed(() => {
 
 async function init() {
   let dictId: any = route.params.id
-  let d = base.word.bookList.find(v => v.id === dictId)
+  let d = base.word.bookList.find(v => isDictIdMatch(v, dictId))
   if (!d) d = base.sdict
   if (!d?.id) return router.push('/words')
   dict = d
-  if (!d.words.length && runtimeStore.editDict?.id === d.id) {
+  if (!d.words.length && isDictIdMatch(runtimeStore.editDict, d.id)) {
     loading = true
-    let r = await _getDictDataByUrl(runtimeStore.editDict)
-    d = r
+    applyFetchedDictResource(d, await _getDictDataByUrl(runtimeStore.editDict))
     loading = false
   }
   if (!dict.words.length) {

@@ -15,7 +15,7 @@ export default defineNuxtPlugin(nuxtApp => {
     'error',
     e => {
       if (e.target !== window) {
-        reportError({ type: 'resource', resourceErr: e?.target?.src })
+        reportError({ type: 'resource', resourceErr: (e.target as (EventTarget & { src?: string }) | null)?.src })
       }
     },
     true

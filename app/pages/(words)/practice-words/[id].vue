@@ -7,6 +7,7 @@ import { useRuntimeStore } from '@/core/stores/runtime.ts'
 import type { Dict, TaskWords, Word } from '@/core/types/types.ts'
 import { useStartKeyboardEventListener } from '@/core/hooks/event.ts'
 import useTheme from '@/core/hooks/theme.ts'
+import { applyFetchedDictResource } from '@/core/composables/dictResourceLoad'
 import { _getDictDataByUrl, isDictIdMatch, resourceWrap, shuffle, throttle } from '@/core/utils'
 import { useRoute, useRouter } from 'vue-router'
 import Footer from '@/components/word/Footer.vue'
@@ -261,7 +262,7 @@ async function loadDict() {
     if (!dict) dict = dict_list.flat().find(v => isDictIdMatch(v, dictId)) as Dict
     if (dict && dict.id) {
       //如果是不是自定义词典，就请求数据
-      if (!dict.custom) dict = await _getDictDataByUrl(dict)
+      if (!dict.custom) applyFetchedDictResource(dict, await _getDictDataByUrl(dict))
       if (!dict.words.length) {
         router.push('/words')
         return Toast.warning('没有单词可学习！')

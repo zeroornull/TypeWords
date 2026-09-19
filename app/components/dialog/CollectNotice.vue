@@ -7,7 +7,7 @@ import { isMobile } from '@/core/utils'
 let showNotice = $ref(false)
 let show = $ref(false)
 let num = $ref(3)
-let timer = -1
+let timer: ReturnType<typeof setInterval> | number = -1
 let mobile = $ref(isMobile())
 
 const model = defineModel({ default: false })

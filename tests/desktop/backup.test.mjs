@@ -12,6 +12,11 @@ const require = createRequire(import.meta.url)
 const JSZip = require(resolve(root, 'public/libs/jszip.min.js'))
 const fixture = JSON.parse(readFileSync(new URL('backup-fixture.json', fixtures)))
 const tone = readFileSync(new URL('backup-tone.mp3', fixtures))
+function exportablePracticeCacheVal(value) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return null
+  return Object.keys(value).length > 0 ? value : null
+}
+
 const constants = {
   EXPORT_DATA_KEY: { version: 5 },
   SAVE_SETTING_KEY: { version: 23 },
@@ -20,6 +25,7 @@ const constants = {
   LIB_JS_URL: { JSZIP: '/libs/jszip.min.js' },
   PRACTICE_WORD_CACHE: { key: 'PracticeSaveWord', version: 2 },
   PRACTICE_ARTICLE_CACHE: { key: 'PracticeSaveArticle', version: 1 },
+  exportablePracticeCacheVal,
 }
 function evaluate(source, globals) {
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
@@ -33,7 +39,8 @@ async function exportFixture(data = fixture, audio = tone) {
     useRuntimeConfig: () => ({ public: { isDesktop: false } }),
     Blob,
     require(name) {
-      if (name === '../config/env' || name === '../utils/cache') return constants
+      if (name === '../config/env') return constants
+      if (name === '../utils/cache') return constants
       if (name === 'vue') return { ref: value => ({ value }) }
       if (name === '../utils') return { loadJsLib: async () => JSZip, shakeCommonDict: structuredClone }
       if (name === 'idb-keyval')
@@ -107,6 +114,27 @@ test('actual setting.vue ZIP import handler stages audio bytes and JSON without 
   assert.equal(records[0].id, 'backup-tone')
   assert.deepEqual(Buffer.from(await records[0].file.arrayBuffer()), tone)
   assert.equal(sandbox.importLoading, false)
+})
+
+test('exporter writes leftover practice caches and uses null, not empty objects, when idle', async () => {
+  const leftover = structuredClone(fixture)
+  leftover.val.PracticeSaveArticle.val.practiceData = { sectionIndex: 6, sentenceIndex: 0, wordIndex: 3 }
+  const leftoverZip = await JSZip.loadAsync(await exportFixture(leftover))
+  const leftoverData = JSON.parse(await leftoverZip.file('data.json').async('string'))
+  assert.deepEqual(leftoverData.val.PracticeSaveArticle.val.practiceData, {
+    sectionIndex: 6,
+    sentenceIndex: 0,
+    wordIndex: 3,
+  })
+  assert.deepEqual(leftoverData.val.PracticeSaveWord.val.taskWordsStr.new, ['fixture'])
+
+  const idle = structuredClone(fixture)
+  idle.val.PracticeSaveWord.val = null
+  idle.val.PracticeSaveArticle.val = {}
+  const idleZip = await JSZip.loadAsync(await exportFixture(idle))
+  const idleData = JSON.parse(await idleZip.file('data.json').async('string'))
+  assert.deepEqual(idleData.val.PracticeSaveWord, { version: 2, val: null })
+  assert.deepEqual(idleData.val.PracticeSaveArticle, { version: 1, val: null })
 })
 
 test('synthetic ZIP read and re-export preserves data and bytes with stub stores (not browser UI)', async () => {

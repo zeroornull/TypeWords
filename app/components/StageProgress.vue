@@ -34,20 +34,10 @@
 </template>
 <script setup lang="ts">
 import { Tooltip, Progress } from '@/base'
+import type { PracticeFlowProgressStage } from '@/core/composables/practice-words/practice-flow-display.ts'
 
 const props = defineProps<{
-  stages: {
-    name: string
-    active?: boolean
-    percentage: number
-    ratio: number
-    children: {
-      active: boolean
-      name: string
-      percentage: number
-      ratio: number
-    }[]
-  }[]
+  stages: PracticeFlowProgressStage[]
 }>()
 </script>
 <style scoped lang="scss"></style>

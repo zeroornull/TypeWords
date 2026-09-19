@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
 import { type Dict, getDefaultDict, type SaveData, type Word } from '../types'
-import { _getStudyProgress, checkAndUpgradeSaveDict, isSameDictResource, parseJsonStr } from '../utils'
+import { _getStudyProgress, checkAndUpgradeSaveDict, isDictIdMatch, isSameDictResource, parseJsonStr } from '../utils'
 import { shallowReactive } from 'vue'
 import { get } from 'idb-keyval'
+import { Toast } from '@/base'
+import { resolveLastLearnIndex } from '../composables/dictResourceLoad'
+import { notifyLocalStoreRecovery, readLocalStoreRecord } from '../composables/localStoreRecovery'
 import { DictId, IS_DEV, SAVE_DICT_KEY } from '../config/env'
 import type { Card } from 'ts-fsrs'
 import { useSettingStore } from './setting.ts'
@@ -102,19 +105,19 @@ export const useBaseStore = defineStore('base', {
   },
   getters: {
     collectWord(): Dict {
-      let res = this.word.bookList.find(v => [v.enName, v.id].includes(DictId.wordCollect))
+      let res = this.word.bookList.find(v => isDictIdMatch(v, DictId.wordCollect))
       return res ?? getDefaultDict()
     },
     collectArticle(): Dict {
-      let res = this.article.bookList.find(v => [v.enName, v.id].includes(DictId.articleCollect))
+      let res = this.article.bookList.find(v => isDictIdMatch(v, DictId.articleCollect))
       return res ?? getDefaultDict()
     },
     wrong(): Dict {
-      let res = this.word.bookList.find(v => [v.enName, v.id].includes(DictId.wordWrong))
+      let res = this.word.bookList.find(v => isDictIdMatch(v, DictId.wordWrong))
       return res ?? getDefaultDict()
     },
     known(): Dict {
-      let res = this.word.bookList.find(v => [v.enName, v.id].includes(DictId.wordKnown))
+      let res = this.word.bookList.find(v => isDictIdMatch(v, DictId.wordKnown))
       return res ?? getDefaultDict()
     },
     knownWords(): string[] {
@@ -186,24 +189,32 @@ export const useBaseStore = defineStore('base', {
       console.timeEnd('$patch')
     },
     async init(): Promise<SaveData | null> {
-      return new Promise(async resolve => {
-        try {
-          let jsonStr: string = await get(SAVE_DICT_KEY.key)
-          if (jsonStr) {
-            let result = await parseJsonStr(jsonStr, checkAndUpgradeSaveDict)
-            // console.log('data', data)
-            this.setState(result.val)
-            resolve(result)
-          }
-          resolve(null)
-        } catch (e) {
-          console.error('读取本地dict数据失败', e)
-          resolve(null)
+      try {
+        const jsonStr = await get(SAVE_DICT_KEY.key)
+        const loaded = await readLocalStoreRecord(jsonStr, raw => parseJsonStr(raw, checkAndUpgradeSaveDict))
+        notifyLocalStoreRecovery(loaded.recovery, 'dict', Toast)
+        if (loaded.record) {
+          this.setState(loaded.record.val)
+          return loaded.record
         }
-      })
+        return null
+      } catch (e) {
+        console.error('读取本地dict数据失败', e)
+        notifyLocalStoreRecovery('corrupt', 'dict', Toast)
+        return null
+      }
     },
     //改变词典
     async changeDict(val: Dict) {
+      let rIndex = this.word.bookList.findIndex((v: Dict) => isSameDictResource(v, val))
+      const leftover = rIndex > -1 ? this.word.bookList[rIndex] : null
+      const leftoverSnap = leftover
+        ? {
+            lastLearnIndex: leftover.lastLearnIndex,
+            words: leftover.words,
+            length: leftover.length,
+          }
+        : null
       //把其他的词典的单词数据都删掉，全保存在内存里太卡了
       this.word.bookList.slice(3).map(v => {
         if (!v.custom) {
@@ -213,24 +224,23 @@ export const useBaseStore = defineStore('base', {
       if (val.words?.length) {
         val.length = val.words.length
       }
-      let rIndex = this.word.bookList.findIndex((v: Dict) => isSameDictResource(v, val))
       if (val.perDayStudyNumber > val.length) {
         val.perDayStudyNumber = val.length
       }
       if (val.lastLearnIndex > val.length) {
-        val.lastLearnIndex = val.length
-        val.complete = true
+        val.lastLearnIndex = resolveLastLearnIndex(leftoverSnap ?? val, val.length)
+        if (val.words?.length) val.complete = true
       }
-      if (rIndex > -1) {
+      if (rIndex > -1 && leftover) {
         this.word.studyIndex = rIndex
-        this.word.bookList[this.word.studyIndex].words = shallowReactive(val.words)
-        this.word.bookList[this.word.studyIndex].id = val.id
-        this.word.bookList[this.word.studyIndex].enName = val.enName
-        this.word.bookList[this.word.studyIndex].length = val.length
-        this.word.bookList[this.word.studyIndex].perDayStudyNumber = val.perDayStudyNumber
-        this.word.bookList[this.word.studyIndex].lastLearnIndex = val.lastLearnIndex
-        this.word.bookList[this.word.studyIndex].userDictId = val.userDictId
-        this.word.bookList[this.word.studyIndex].complete = val.complete
+        leftover.words = shallowReactive(val.words)
+        leftover.id = val.id
+        leftover.enName = val.enName
+        leftover.length = val.length
+        leftover.perDayStudyNumber = val.perDayStudyNumber
+        leftover.lastLearnIndex = resolveLastLearnIndex(leftoverSnap ?? leftover, val.lastLearnIndex)
+        leftover.userDictId = val.userDictId
+        leftover.complete = val.complete
       } else {
         this.word.bookList.push(getDefaultDict(val))
         this.word.studyIndex = this.word.bookList.length - 1

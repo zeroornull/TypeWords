@@ -4,7 +4,7 @@ import { BaseButton, Dialog } from '@/base'
 import { useExport } from '@/core/hooks/export'
 import { Toast } from '~/base'
 
-const model = defineModel()
+const model = defineModel({ default: false })
 const isDesktop = useRuntimeConfig().public.isDesktop
 
 const { loading: backupLoading, exportData } = useExport()

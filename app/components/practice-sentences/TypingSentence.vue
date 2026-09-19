@@ -24,12 +24,14 @@ interface IProps {
   index: number
   /** 需要高亮标注的词列表 */
   highlightWords?: string[]
+  isHighlightWordsMask?: boolean
 }
 
 const props = withDefaults(defineProps<IProps>(), {
   showSentenceTranslation: true,
   active: false,
   highlightWords: () => [],
+  isHighlightWordsMask: false,
 })
 
 const emit = defineEmits<{
@@ -171,7 +173,7 @@ defineExpose({
         :active="active"
         :isPractice="active"
         :play="play"
-        :isHighlightWordsMask="$attrs.isHighlightWordsMask"
+        :isHighlightWordsMask="isHighlightWordsMask"
         :highlight-words="highlightWords"
         :dictation="settingStore.dictation"
         @complete="e => emit('complete', e)"

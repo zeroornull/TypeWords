@@ -265,6 +265,7 @@ export async function run() {
         },
       },
     })
+    const dictResourceLoad = load('dictResourceLoad')
     const persistence = load('persistence', {
       '../platform/accountPersistence': {
         setManyForAccount: (entries, scope) =>
@@ -302,6 +303,7 @@ export async function run() {
       'idb-keyval': storage,
       '@/base': {},
       vue: { nextTick, toRaw },
+      './dictResourceLoad': dictResourceLoad,
       './remotePracticeValidation': validation,
       './settingsValidation': settingsValidation,
       './dictionaryValidation': dictionaryValidation,

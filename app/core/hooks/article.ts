@@ -1,6 +1,6 @@
 import type { Article, Sentence } from '../types'
 import { getDefaultArticleWord, getDefaultDict, PracticeArticleWordType } from '../types'
-import { _nextTick, cloneDeep, ensureCustomDictCopy } from '../utils'
+import { _nextTick, cloneDeep, ensureCustomDictCopy, isDictIdMatch } from '../utils'
 import { usePlayWordAudio, useTTsPlayAudio } from './sound'
 import { getSentenceAllText, getSentenceAllTranslateText } from './translate'
 import { useBaseStore } from '../stores/base'
@@ -343,7 +343,7 @@ export function splitCNArticle2(text: string): string {
 
 export function usePlaySentenceAudio() {
   const playWordAudio = usePlayWordAudio()
-  let timer = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
   let onEndCb = null
 
   function playSentenceAudio(sentence: Sentence, ref?: HTMLAudioElement, onEnd?: () => void) {
@@ -446,7 +446,7 @@ export function syncBookInMyStudyList(study = false) {
     const runtimeStore = useRuntimeStore()
     const originalId = runtimeStore.editDict.id
     let temp = ensureCustomDictCopy(runtimeStore.editDict)
-    let rIndex = base.article.bookList.findIndex(v => v.id === originalId)
+    let rIndex = base.article.bookList.findIndex(v => isDictIdMatch(v, originalId))
     temp.length = temp.articles.length
     runtimeStore.editDict = temp
     if (rIndex > -1) {

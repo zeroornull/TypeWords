@@ -175,7 +175,7 @@ onMounted(async () => {
 
 defineRender(() => {
   const d = item => (
-    <Checkbox modelValue={selectIds.includes(item.id)} onChange={() => toggleSelect(item)} size="large" />
+    <Checkbox modelValue={selectIds.includes(item.id)} onOnChange={() => toggleSelect(item)} />
   )
 
   return (
@@ -203,9 +203,8 @@ defineRender(() => {
                 <div class="flex gap-2 items-center">
                   <Checkbox
                     disabled={!params.list.length}
-                    onChange={() => toggleSelectAll()}
+                    onOnChange={() => toggleSelectAll()}
                     modelValue={selectAll}
-                    size="large"
                   />
                   <span>
                     {selectIds.length} / {params.total}
@@ -253,11 +252,7 @@ defineRender(() => {
                 >
                   <IconFluentSearch20Regular />
                 </BaseIcon>
-                <MiniDialog
-                  modelValue={showSortDialog}
-                  onUpdate:modelValue={e => (showSortDialog = e)}
-                  style="width: 8rem;"
-                >
+                <MiniDialog modelValue={showSortDialog} width="8rem">
                   <div class="mini-row-title">{$t('list_order_setting')}</div>
                   <div class="flex flex-col gap2 btn-no-margin">
                     <BaseButton onClick={() => sort(Sort.reverse)}>{$t('reverse_current_page')}</BaseButton>

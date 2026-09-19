@@ -93,16 +93,16 @@ const list = $computed(() => {
 defineRender(() => {
   return list.map((item, i) => {
     if (item.type === 'word-complete') {
-      return <span className={isHighLight}>{item.val}</span>
+      return <span class={isHighLight}>{item.val}</span>
     }
     if (item.type === 'word-end') {
-      return <span className={'word-end ' + classNames.join(' ')}>{item.val}</span>
+      return <span class={'word-end ' + classNames.join(' ')}>{item.val}</span>
     }
     if (item.type === 'input-right') {
-      return <span className={props.isTyping && 'input-right'}>{item.val}</span>
+      return <span class={props.isTyping && 'input-right'}>{item.val}</span>
     }
     if (item.type === 'input-wrong') {
-      return <span className="input-wrong">{item.val}</span>
+      return <span class="input-wrong">{item.val}</span>
     }
     if (item.type === 'space') {
       return <Space isWrong={true} />

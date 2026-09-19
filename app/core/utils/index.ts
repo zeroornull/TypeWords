@@ -31,6 +31,7 @@ import { Toast } from '@/base'
 import { get } from 'idb-keyval'
 import { nanoid } from 'nanoid'
 import { saveHashSnapshot } from '../composables/useDataSyncPersistence'
+import { notifyDictResourceLoad, readDictResourcePayload } from '../composables/dictResourceLoad'
 import { withAppBaseURL } from './base-url'
 
 dayjs.extend(duration)
@@ -368,14 +369,20 @@ export async function _getDictDataByUrl(val: DictResource, type: DictType = Dict
   if (type === DictType.article) {
     dictResourceUrl = ENV.RESOURCE_URL + `/dicts/${val.language}/article/${val.url}`
   }
-  let s = await fetch(resourceWrap(dictResourceUrl, val.version)).then(r => r.json())
-  if (s) {
+  const loaded = await readDictResourcePayload(async () => {
+    const response = await fetch(resourceWrap(dictResourceUrl, val.version))
+    if (!response.ok) {
+      return { ok: false, status: response.status, payload: null }
+    }
+    return { ok: true, status: response.status, payload: await response.json() }
+  })
+  notifyDictResourceLoad(loaded.status, Toast)
+  if (loaded.status === 'ok' && loaded.payload) {
     //单词词典有两种类型，用article来判断
     if (type === DictType.article) {
-      return getDefaultDict({ ...val, articles: s })
-    } else {
-      return getDefaultDict({ ...val, words: s })
+      return getDefaultDict({ ...val, articles: loaded.payload })
     }
+    return getDefaultDict({ ...val, words: loaded.payload })
   }
   return getDefaultDict()
 }
@@ -691,7 +698,9 @@ export function isSameDictResource(a?: DictIdentity | null, b?: DictIdentity | n
 
 /** @deprecated 优先使用 dict.system 字段判断，仅作兼容 fallback */
 export function isBuiltinDictId(id: unknown): boolean {
-  return [DictId.wordKnown, DictId.wordWrong, DictId.wordCollect, DictId.articleCollect].includes(normalizeDictId(id) as any)
+  return [DictId.wordKnown, DictId.wordWrong, DictId.wordCollect, DictId.articleCollect].includes(
+    normalizeDictId(id) as any
+  )
 }
 
 export function ensureCustomDictCopy(dict: Dict): Dict {

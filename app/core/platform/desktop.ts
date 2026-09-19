@@ -17,6 +17,11 @@ export async function saveBackup(content: Blob, fileName: string, desktop: boole
 }
 
 // Existing product destinations only. Keep native capability scope in sync.
+// Official P3-02 leftover dest-click inventory (V090/V093; do not add dest UI):
+//   2study.top — old-host banner only when location.host===2study.top
+//   www.google.cn — IeDialog IE-only
+//   pan.quark.cn — /doc QR-only, no dest <a href>
+//   supabase.com + settings kdocs — desktop-hidden (D09)
 export const EXTERNAL_HOSTS = [
   'github.com',
   'typewords.cc',

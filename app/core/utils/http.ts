@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { AxiosInstance } from 'axios'
+import { DESKTOP_WORD_QUERY_DISABLED_MESSAGE, normalizeDesktopApiBase } from '../config/desktopOnlineFeatures.ts'
 import { ENV } from '../config/env.ts'
 import { Toast } from '@/base'
 
@@ -12,24 +13,13 @@ axiosInstance.interceptors.request.use(
     const runtime = useRuntimeConfig().public
     if (runtime.isDesktop) {
       // Static desktop builds have no Nitro proxy or implicit localhost API.
-      let endpoint: URL | undefined
-      try {
-        endpoint = new URL(String(runtime.desktopApiBase || '').trim())
-      } catch {}
-      if (
-        !endpoint ||
-        endpoint.protocol !== 'https:' ||
-        /^(localhost\.?|127(?:\.\d+){3}|\[::1\])$/i.test(endpoint.hostname) ||
-        endpoint.username ||
-        endpoint.password ||
-        endpoint.search ||
-        endpoint.hash
-      ) {
-        throw Object.assign(new Error('桌面在线查询 API 未配置有效的 HTTPS 服务，当前功能未启用'), {
+      const endpoint = normalizeDesktopApiBase(runtime.desktopApiBase)
+      if (!endpoint) {
+        throw Object.assign(new Error(DESKTOP_WORD_QUERY_DISABLED_MESSAGE), {
           code: 'DESKTOP_API_UNAVAILABLE',
         })
       }
-      config.baseURL = endpoint.href.replace(/\/?$/, '/')
+      config.baseURL = endpoint
     } else {
       config.baseURL = ENV.API
     }

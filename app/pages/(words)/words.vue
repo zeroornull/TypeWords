@@ -21,6 +21,7 @@ import {
   _nextTick,
   debounce,
   getShufflePracticeWords,
+  isDictIdMatch,
   isMobile,
   loadJsLib,
   msToHourMinute,
@@ -50,6 +51,7 @@ import {
 } from '@/core/config/env.ts'
 import PracticeWordListDialog from '@/components/word/PracticeWordListDialog.vue'
 import ShufflePracticeSettingDialog from '@/components/word/ShufflePracticeSettingDialog.vue'
+import { applyFetchedDictResource, resolveLastLearnIndex } from '@/core/composables/dictResourceLoad'
 import { flushStatToStore } from '@/core/composables/usePracticePersistence'
 import { useDataSyncPersistence } from '@/core/composables/useDataSyncPersistence'
 import { WordPracticeMode } from '@/core/types/enum.ts'
@@ -227,25 +229,22 @@ async function init() {
     if (!store.sdict.custom && !store.sdict.words.length) {
       let dictList = await fetch(resourceWrap(DICT_LIST.WORD.ALL)).then(r => r.json())
       let dict = await _getDictDataByUrl(store.sdict)
-      let r = dictList.find(v => [v.enName, v.id].includes(store.sdict.id))
+      const leftover = store.word.bookList[studyIndex]
+      let r = (Array.isArray(dictList) ? dictList.flat() : []).find(v => isDictIdMatch(v, leftover.id))
       if (r) {
-        store.word.bookList[studyIndex].words = dict.words
-        store.word.bookList[studyIndex].id = r.id
-        store.word.bookList[studyIndex].enName = r.enName
-        store.word.bookList[studyIndex].cover = r.cover
-        store.word.bookList[studyIndex].category = r.category
-        store.word.bookList[studyIndex].tags = r.tags
-        store.word.bookList[studyIndex].url = r.url
-        store.word.bookList[studyIndex].description = r.description
-        store.word.bookList[studyIndex].name = r.name
-      } else {
-        store.word.bookList[studyIndex] = dict
+        leftover.id = r.id
+        leftover.enName = r.enName
+        leftover.cover = r.cover
+        leftover.category = r.category
+        leftover.tags = r.tags
+        leftover.url = r.url
+        leftover.description = r.description
+        leftover.name = r.name
       }
-      store.word.bookList[studyIndex].length = dict.words.length
-      let s = store.word.bookList[studyIndex]
-      if (s.lastLearnIndex > s.length) {
-        store.word.bookList[studyIndex].lastLearnIndex = s.length
-        store.word.bookList[studyIndex].complete = true
+      applyFetchedDictResource(leftover, dict)
+      if (leftover.words.length && leftover.lastLearnIndex > leftover.length) {
+        leftover.lastLearnIndex = leftover.length
+        leftover.complete = true
         await resetCacheData()
       }
     }
@@ -534,7 +533,7 @@ async function onShufflePracticeSettingOk(setting: ShufflePracticeSetting) {
 }
 
 async function saveLastPracticeIndex(e) {
-  runtimeStore.editDict.lastLearnIndex = e
+  runtimeStore.editDict.lastLearnIndex = resolveLastLearnIndex(runtimeStore.editDict, e)
   showChangeLastPracticeIndexDialog = false
   await resetCacheData()
   await store.changeDict(runtimeStore.editDict)

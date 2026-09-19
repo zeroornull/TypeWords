@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import test from 'node:test'
+
+const root = resolve(process.env.TYPEWORDS_TEST_ROOT || process.cwd())
+
+test('native listen runner plays Youdao and custom article audio without aborting HTTPS', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-listen-audio.mjs'), 'utf8')
+  assert.match(runner, /humanListenClaim: false/)
+  assert.match(runner, /isolated-profile/)
+  assert.match(runner, /createHash\('sha256'\)\.update\(readFileSync\(launch\.exe\)\)/)
+  assert.match(runner, /dictvoice/)
+  assert.match(runner, /youdao/)
+  assert.match(runner, /OFFICIAL_T01_BUILTIN_WORD_BOOK/)
+  assert.match(runner, /practice-words\/\$\{OFFICIAL_T01_BUILTIN_WORD_BOOK\.id\}/)
+  assert.match(runner, /resolveInstalledPracticeWord/)
+  assert.match(runner, /practice-articles\/backup-articles/)
+  assert.match(runner, /backup-tone/)
+  assert.match(runner, /blob:/)
+  assert.doesNotMatch(runner, /route\.abort/)
+  assert.match(runner, /_ignoreWatch/)
+  assert.match(runner, /wordSoundVolume/)
+  assert.match(runner, /native-listen-audio\.json/)
+})
+
+test('native listen runner does not depend on leftover-complete backup-custom fixture', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-listen-audio.mjs'), 'utf8')
+  assert.doesNotMatch(runner, /practice-words\/backup-custom/)
+  assert.doesNotMatch(runner, /assert\.equal\(word, 'fixture'\)/)
+  assert.doesNotMatch(runner, /audio=fixture/)
+  assert.match(runner, /Refusing leftover mask/)
+  assert.match(runner, /isMaskedPracticeLetterText/)
+  assert.match(runner, /CET-4 must stay on a practice task/)
+})
+
+test('listen/Youdao dest proof on 99948E67 is pre-leftover-fix and does not close T05 human-ear or T04 NIC-off', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-listen-audio.mjs'), 'utf8')
+  assert.match(runner, /Honesty-only T05\/R4 dest lock/)
+  assert.match(runner, /Do not rematrix dest/)
+  assert.match(runner, /Do not add dest UI/)
+  assert.match(runner, /99948E67C19B6C66501AE23D4DA643D31D4EE46B358F9063E5A9AFE972D77D72/)
+  assert.match(runner, /pre-leftover-fix/)
+  assert.match(runner, /does not contain leftover-fix/)
+  assert.match(runner, /isDictIdMatch/)
+  assert.match(runner, /Dest proof does not close T05 human-ear/)
+  assert.match(runner, /Human-ear remains user-blocked/)
+  assert.match(runner, /Dest proof does not close T04 NIC-off/)
+  assert.match(runner, /Ethernet-off remains user-blocked/)
+  assert.match(runner, /humanListenClaim: false/)
+  assert.match(runner, /route\.fulfill/)
+  assert.doesNotMatch(runner, /Disable-NetAdapter/)
+  assert.doesNotMatch(runner, /Get-NetTCPConnection/)
+})
+
+test('native listen runner dest-verifies official T05 machine cells on leftover dest', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-listen-audio.mjs'), 'utf8')
+  assert.match(runner, /type=2/)
+  assert.match(runner, /type=1/)
+  assert.match(runner, /setSoundTypeIgnored/)
+  assert.match(runner, /'uk'/)
+  assert.match(runner, /'us'/)
+  assert.match(runner, /route\.fulfill/)
+  assert.match(runner, /status: 404/)
+  assert.match(runner, /speechSynthesis/)
+  assert.match(runner, /index <= 20/)
+  assert.match(runner, /must not 误切词/)
+  assert.match(runner, /\/setting/)
+  assert.match(runner, /1\.25/)
+  assert.match(runner, /assertLeftover/)
+  assert.match(runner, /custom-20/)
+  assert.match(runner, /snapshot\.volume, 37/)
+  assert.match(runner, /snapshot\.possess, true/)
+  assert.match(runner, /snapshot\.audioBytes, 2943/)
+  assert.match(runner, /articleCache\?\.sectionIndex, 6/)
+  assert.match(runner, /articleCache\?\.wordIndex, 3/)
+  assert.doesNotMatch(runner, /Get-NetTCPConnection/)
+  assert.doesNotMatch(runner, /Disable-NetAdapter/)
+  assert.doesNotMatch(runner, /LOCALAPPDATA/)
+})
+
+test('article practice does not set volume on an unmounted custom-audio player', () => {
+  const source = readFileSync(resolve(root, 'app/pages/(articles)/practice-articles/[id].vue'), 'utf8')
+  assert.match(source, /if \(!audioRef\) return/)
+  assert.match(source, /audioRef\.volume = settingStore\.articleSoundVolume \/ 100/)
+  assert.match(source, /watch\(\s*\(\) => Boolean\(audioRef\)/)
+})
+
+test('article audio expose proxy returns play and pause functions', () => {
+  const source = readFileSync(resolve(root, 'app/components/article/ArticleAudio.vue'), 'utf8')
+  assert.match(source, /if \(key === 'play'\) return \(\) => instance\?\.audioRef\?\.play\(\)/)
+  assert.match(source, /if \(key === 'pause'\) return \(\) => instance\?\.audioRef\?\.pause\(\)/)
+  assert.doesNotMatch(source, /if \(key === 'play'\) instance\?\.audioRef\?\.play\(\)/)
+})
+
+test('native listen runner fails if the old article volume pageerror returns', () => {
+  const runner = readFileSync(resolve(root, 'tests/desktop/native-listen-audio.mjs'), 'utf8')
+  assert.doesNotMatch(runner, /knownCurrentExeArticleVolumeError/)
+  assert.match(runner, /assert\.deepEqual\(report\.errors, \[\]\)/)
+  assert.match(runner, /articleVolumeError/)
+})

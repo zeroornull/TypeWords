@@ -15,7 +15,7 @@ import { Toast } from '@/base'
 import { useBaseStore } from '../stores/base'
 import { useSettingStore } from '../stores/setting'
 import { ref } from 'vue'
-import { PRACTICE_ARTICLE_CACHE, PRACTICE_WORD_CACHE } from '../utils/cache'
+import { exportablePracticeCacheVal, PRACTICE_ARTICLE_CACHE, PRACTICE_WORD_CACHE } from '../utils/cache'
 import { usePracticeArticlePersistence, usePracticeWordPersistence } from '../composables/usePracticePersistence.ts'
 import type { BackupData } from '../types'
 
@@ -29,8 +29,10 @@ export function useExport() {
   async function getExportedData() {
     const wordPersistence = usePracticeWordPersistence()
     const articlePersistence = usePracticeArticlePersistence()
+    const wordCacheVal = exportablePracticeCacheVal(await wordPersistence.getLocalDataCompact())
+    const articleCacheVal = exportablePracticeCacheVal(await articlePersistence.getLocalDataCompact())
 
-    let data: BackupData = {
+    const data: BackupData = {
       version: EXPORT_DATA_KEY.version,
       val: {
         setting: {
@@ -43,21 +45,13 @@ export function useExport() {
         },
         [PRACTICE_WORD_CACHE.key]: {
           version: PRACTICE_WORD_CACHE.version,
-          val: {},
+          val: wordCacheVal,
         },
         [PRACTICE_ARTICLE_CACHE.key]: {
           version: PRACTICE_ARTICLE_CACHE.version,
-          val: {},
+          val: articleCacheVal,
         },
       },
-    }
-    let d = await wordPersistence.getLocalDataCompact()
-    if (d) {
-      data.val[PRACTICE_WORD_CACHE.key].val = d
-    }
-    let d1 = await articlePersistence.getLocalDataCompact()
-    if (d1) {
-      data.val[PRACTICE_ARTICLE_CACHE.key].val = d1
     }
     return data
   }

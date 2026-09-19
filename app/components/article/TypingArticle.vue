@@ -24,7 +24,7 @@ import { inject, onMounted, onUnmounted, watch } from 'vue'
 
 import { usePracticeArticlePersistence } from '@/core/composables/usePracticePersistence'
 import { PracticeArticleWordType, ShortcutKey } from '@/core/types'
-import type { PracticeArticleCache } from '@/core/utils/cache'
+import { resolveArticlePracticeCursor, type PracticeArticleCache } from '@/core/utils/cache'
 
 interface IProps {
   article: Article
@@ -162,9 +162,10 @@ async function init() {
   isSpace = isEnd = false
   const d = await articlePersistence.load()
   if (d) {
-    sectionIndex = d.practiceData.sectionIndex
-    sentenceIndex = d.practiceData.sentenceIndex
-    wordIndex = d.practiceData.wordIndex
+    const cursor = resolveArticlePracticeCursor(props.article.sections, d.practiceData)
+    sectionIndex = cursor.sectionIndex
+    sentenceIndex = cursor.sentenceIndex
+    wordIndex = cursor.wordIndex
     jump(sectionIndex, sentenceIndex, wordIndex)
     statStore.$patch(d.statStoreData)
   } else {
@@ -184,8 +185,11 @@ async function init() {
     window.scrollTo({ top: 0 })
   }
   _nextTick(() => {
-    emit('play', { sentence: props.article.sections[sectionIndex][sentenceIndex], handle: false })
-    if (isNameWord()) next()
+    const sentence = props.article.sections?.[sectionIndex]?.[sentenceIndex]
+    if (sentence) {
+      emit('play', { sentence, handle: false })
+      if (isNameWord()) next()
+    }
   })
   checkTranslateLocation().then(() => checkCursorPosition())
   focusMobileInput()
@@ -314,9 +318,8 @@ const namePatterns = $computed(() => {
 })
 
 const isNameWord = () => {
-  let currentSection = props.article.sections[sectionIndex]
-  let currentSentence = currentSection[sentenceIndex]
-  let w: ArticleWord = currentSentence.words[wordIndex]
+  const currentSentence = props.article.sections?.[sectionIndex]?.[sentenceIndex]
+  const w: ArticleWord | undefined = currentSentence?.words?.[wordIndex]
   return w?.type === PracticeArticleWordType.Word && namePatterns.length > 0 && namePatterns.includes(normalize(w.word))
 }
 
@@ -475,8 +478,9 @@ function onTyping(e: KeyboardEvent) {
 }
 
 function play() {
-  let currentSection = props.article.sections[sectionIndex]
-  emit('play', { sentence: currentSection[sentenceIndex], handle: true })
+  const sentence = props.article.sections?.[sectionIndex]?.[sentenceIndex]
+  if (!sentence) return
+  emit('play', { sentence, handle: true })
 }
 
 function playArticleTitleAudio() {
@@ -588,9 +592,9 @@ function jump(i, j, w, sentence?) {
 
 function applyPracticeCache(cache: PracticeArticleCache) {
   if (!cache?.practiceData) return
-  const { sectionIndex: i = 0, sentenceIndex: j = 0, wordIndex: w = 0 } = cache.practiceData
+  const cursor = resolveArticlePracticeCursor(props.article.sections, cache.practiceData)
   statStore.$patch(cache.statStoreData ?? {})
-  jump(i, j, w)
+  jump(cursor.sectionIndex, cursor.sentenceIndex, cursor.wordIndex)
   _nextTick(() => {
     const sentence = props.article.sections?.[sectionIndex]?.[sentenceIndex]
     if (sentence) {
@@ -627,8 +631,9 @@ function onContextMenu(e: MouseEvent, sentence: Sentence, i, j, w) {
           }
           if (!text.length) text = word.word
           setTimeout(() => {
-            openWordCollectPicker(getDefaultWord({ word: text, id: nanoid() }), { x: e.x, y: e.y })
-          },300)
+            const anchor = (e.currentTarget || e.target) as HTMLElement
+            if (anchor) openWordCollectPicker(getDefaultWord({ word: text, id: nanoid() }), anchor)
+          }, 300)
         },
       },
       {
@@ -1055,7 +1060,6 @@ $article-lh: 2.4;
 .sentence-translate-mobile {
   display: none;
 }
-
 
 @media (max-width: 768px) {
   .typing-article {

@@ -4,9 +4,11 @@ import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useSettingStore } from '@/core/stores/setting.ts'
 import { usePlayWordAudio } from '@/core/hooks/sound.ts'
+import { DESKTOP_WORD_QUERY_DISABLED_MESSAGE } from '@/core/config/desktopOnlineFeatures.ts'
 import { closeWordLookup, wordLookupState } from '@/core/hooks/useWordLookup.ts'
 import { openWordCollectPicker } from '@/core/hooks/useWordCollectPicker.ts'
 import { getDefaultWord } from '@/core/types/func.ts'
+import { resolveWordLookupEmptyCopy } from '@/core/utils/wordLookup.ts'
 import TranslationList from './TranslationList.vue'
 import { goYoudao } from '@/core/utils'
 
@@ -24,6 +26,17 @@ const collectTarget = computed(() => {
   if (wordLookupState.queryWord) return getDefaultWord({ word: wordLookupState.queryWord })
   return null
 })
+
+const lookupEmptyCopy = computed(() =>
+  resolveWordLookupEmptyCopy({
+    isDesktop: Boolean(useRuntimeConfig().public.isDesktop),
+    desktopApiBase: useRuntimeConfig().public.desktopApiBase,
+    httpMessage: wordLookupState.httpMessage,
+  })
+)
+
+const officialQueryDisabled = computed(() => lookupEmptyCopy.value === DESKTOP_WORD_QUERY_DISABLED_MESSAGE)
+const showLookupEmpty = computed(() => officialQueryDisabled.value || wordLookupState.notFound)
 
 function openCollect(e: MouseEvent) {
   e.stopPropagation()
@@ -88,7 +101,7 @@ watch(
         <template v-if="wordLookupState.loading">
           <div class="text-sm color-gray py-2 pr-5">查询中...</div>
         </template>
-        <template v-else-if="wordLookupState.notFound">
+        <template v-else-if="showLookupEmpty">
           <div class="flex items-center gap-2 flex-wrap pr-5">
             <span class="text-lg font-medium">{{ wordLookupState.queryWord }}</span>
             <VolumeIcon :simple="true" :cb="() => playWordAudio(wordLookupState.queryWord)" />
@@ -97,7 +110,7 @@ watch(
             </BaseIcon>
           </div>
           <div class="color-gray mt-1 flex items-center gap-2">
-            <span>暂未收录该单词</span>
+            <span>{{ lookupEmptyCopy }}</span>
             <BaseButton @click="goYoudao(wordLookupState.queryWord)">
               <div class="flex items-center gap-2">
                 <IconFluentSearch20Regular />

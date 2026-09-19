@@ -14,11 +14,13 @@ import {
   _nextTick,
   ensureCustomDictCopy,
   findOfficialSourceDict,
+  isDictIdMatch,
   msToHourMinute,
   resourceWrap,
   total,
   useNav,
 } from '@/core/utils'
+import { applyFetchedDictResource } from '@/core/composables/dictResourceLoad'
 import { getDefaultArticle, getDefaultDict } from '@/core/types/func.ts'
 import ArticleAudio from '@/components/article/ArticleAudio.vue'
 import { MessageBox } from '@/core/utils/MessageBox.tsx'
@@ -161,22 +163,25 @@ function reset() {
     '继续此操作会重置所有文章，并从官方书籍获取最新文章列表，学习记录不会被重置。确认恢复默认吗？',
     '恢复默认',
     async () => {
-      let dict = findOfficialSourceDict(book_list.value ?? [], runtimeStore.editDict) as Dict
-      if (dict && dict.id) {
-        dict = await _getDictDataByUrl(dict, DictType.article)
-        let rIndex = store.article.bookList.findIndex(v => v.id === runtimeStore.editDict.id)
+      const official = findOfficialSourceDict(book_list.value ?? [], runtimeStore.editDict) as Dict
+      if (official && official.id) {
+        const fetched = await _getDictDataByUrl(official, DictType.article)
+        let rIndex = store.article.bookList.findIndex(v => isDictIdMatch(v, runtimeStore.editDict.id))
         if (rIndex > -1) {
           let item = store.article.bookList[rIndex]
-          item.articles = dict.articles
-          item.length = dict.articles.length
-          item.url = dict.url
-          item.cover = dict.cover
-          item.description = dict.description
-          item.name = dict.name
-          item.category = dict.category
-          item.tags = dict.tags
-          item.enName = dict.enName
-          item.sourceId = String(dict.id)
+          if (!fetched.articles?.length) {
+            Toast.error('恢复失败')
+            return
+          }
+          applyFetchedDictResource(item, fetched)
+          item.url = official.url
+          item.cover = official.cover
+          item.description = official.description
+          item.name = official.name
+          item.category = official.category
+          item.tags = official.tags
+          item.enName = official.enName
+          item.sourceId = String(official.id)
           if (item.lastLearnIndex >= item.articles.length) {
             item.lastLearnIndex = Math.max(item.articles.length - 1, 0)
           }

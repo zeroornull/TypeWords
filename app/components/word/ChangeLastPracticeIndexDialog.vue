@@ -7,7 +7,7 @@ import { AppEnv } from '@/core/config/env.ts'
 
 const Dialog = defineAsyncComponent(() => import('@/base/dialog/Dialog.vue'))
 
-const model = defineModel()
+const model = defineModel({ default: false })
 const runtimeStore = useRuntimeStore()
 
 async function requestList({ pageNo, pageSize, searchKey }) {

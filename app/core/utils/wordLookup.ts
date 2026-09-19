@@ -1,12 +1,32 @@
 import { queryWord } from '../apis/words.ts'
+import {
+  DESKTOP_WORD_QUERY_DISABLED_MESSAGE,
+  isDesktopWordQueryEnabled,
+} from '../config/desktopOnlineFeatures.ts'
 import type { Word } from '../types/types.ts'
 
 const lookupCache = new Map<string, Word | null>()
+export const WORD_LOOKUP_NOT_FOUND_MESSAGE = '暂未收录该单词'
 
 export interface WordLookupResolution {
   query: string
   candidates: string[]
   data: Word | null
+  httpMessage?: string
+}
+
+export function resolveWordLookupEmptyCopy(options: {
+  isDesktop?: boolean
+  desktopApiBase?: unknown
+  httpMessage?: string
+} = {}): string {
+  if (
+    options.httpMessage === DESKTOP_WORD_QUERY_DISABLED_MESSAGE ||
+    (Boolean(options.isDesktop) && !isDesktopWordQueryEnabled(options.desktopApiBase))
+  ) {
+    return DESKTOP_WORD_QUERY_DISABLED_MESSAGE
+  }
+  return WORD_LOOKUP_NOT_FOUND_MESSAGE
 }
 
 export function stripWordPunctuation(word: string): string {
@@ -29,9 +49,13 @@ export async function resolveWordLookup(rawWord: string): Promise<WordLookupReso
   }
 
   const res = await queryWord({ word: query })
+  const httpMessage = typeof res.msg === 'string' ? res.msg : undefined
+  if (httpMessage === DESKTOP_WORD_QUERY_DISABLED_MESSAGE) {
+    return { query, candidates, data: null, httpMessage }
+  }
   const data = res.success && res.data ? res.data : null
   lookupCache.set(query, data)
-  return { query, candidates, data }
+  return { query, candidates, data, httpMessage }
 }
 
 export function splitEnglishText(text: string): { text: string; isWord: boolean }[] {

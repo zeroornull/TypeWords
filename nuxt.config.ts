@@ -93,6 +93,10 @@ export default defineNuxtConfig({
     ...(isDesktop ? { server: { strictPort: true, watch: { ignored: ['**/src-tauri/**'] } } } : {}),
     plugins: [
       Components({
+        // Desktop generate must not rewrite committed app/components.d.ts.
+        // unplugin-vue-components fire-and-forgets writeDeclaration; on Windows
+        // open() UNKNOWN becomes unhandledRejection while the process still exits 0.
+        dts: !isDesktop,
         resolvers: [
           IconsResolver({
             prefix: 'Icon',
@@ -105,7 +109,15 @@ export default defineNuxtConfig({
     ],
   },
   // 模块
-  modules: ['@pinia/nuxt', '@unocss/nuxt', 'unplugin-icons/nuxt', '@vue-macros/nuxt', '@nuxtjs/i18n', '@nuxt/image'],
+  modules: [
+    '@pinia/nuxt',
+    '@unocss/nuxt',
+    'unplugin-icons/nuxt',
+    '@vue-macros/nuxt',
+    '@nuxtjs/i18n',
+    '@nuxt/image',
+    './scripts/drop-vue-router-volar-plugin.mjs',
+  ],
   macros: {
     betterDefine: false,
   },

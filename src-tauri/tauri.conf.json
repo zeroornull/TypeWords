@@ -58,6 +58,7 @@
   },
   "bundle": {
     "active": false,
+    "createUpdaterArtifacts": false,
     "icon": [
       "icons/icon.ico"
     ]

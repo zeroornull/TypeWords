@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { createEmptyCard, Rating } from 'ts-fsrs'
+import { createEmptyCard, Rating, type Grade } from 'ts-fsrs'
 import { useBaseStore } from '@/core/stores/base.ts'
 import { usePracticeStore } from '@/core/stores/practice.ts'
 import { useSettingStore } from '@/core/stores/setting.ts'
@@ -11,6 +11,7 @@ import { cloneDeep, getShufflePracticeWords, shuffle } from '@/core/utils'
 import { useWordOptions } from '@/core/hooks/dict.ts'
 import { useGetGradeByWrongTimes, useNextCard } from '@/core/hooks/fsrs.ts'
 import { flushStatToStore } from '@/core/composables/usePracticePersistence.ts'
+import { resolveLastLearnIndex } from '@/core/composables/dictResourceLoad.ts'
 import {
   addWrongWordKey,
   getDefaultPracticeData,
@@ -40,6 +41,18 @@ export interface PracticeWordMarkPickResult {
   know: Word[]
   mastered: Word[]
   unknown: Word[]
+}
+
+function toFsrsGrade(rating: Rating): Grade | undefined {
+  switch (rating) {
+    case Rating.Again:
+    case Rating.Hard:
+    case Rating.Good:
+    case Rating.Easy:
+      return rating
+    default:
+      return undefined
+  }
 }
 
 /**
@@ -259,8 +272,8 @@ export function usePracticeWordSession(options: PracticeWordSessionOptions) {
       : store.sdict.words
     const ignoreCount = ignoreList.filter(key => wordsToCheck.some(word => word.word === key)).length
     if (store.sdict.lastLearnIndex + ignoreCount >= store.sdict.length) {
-      store.sdict.complete = true
-      store.sdict.lastLearnIndex = store.sdict.length
+      store.sdict.lastLearnIndex = resolveLastLearnIndex(store.sdict, store.sdict.length)
+      if (store.sdict.words?.length) store.sdict.complete = true
     }
   }
 
@@ -275,9 +288,12 @@ export function usePracticeWordSession(options: PracticeWordSessionOptions) {
     flushStatToStore(statStore.$state)
 
     for (const [word, wrongTimes] of Object.entries(data.wrongTimesMap)) {
-      const rating = data.ratingMap[word] ?? getGradeByWrongTimes(wrongTimes)
+      const grade =
+        toFsrsGrade(data.ratingMap[word] ?? getGradeByWrongTimes(wrongTimes)) ??
+        toFsrsGrade(getGradeByWrongTimes(wrongTimes))
+      if (grade === undefined) continue
       const card = store.fsrsData[word] ?? createEmptyCard()
-      store.fsrsData[word] = nextCard(card, rating)
+      store.fsrsData[word] = nextCard(card, grade)
     }
   }
 
@@ -314,7 +330,10 @@ export function usePracticeWordSession(options: PracticeWordSessionOptions) {
   }
 
   function createTaskFromGroup(group: number): TaskWords {
-    store.sdict.lastLearnIndex = (group - 1) * store.sdict.perDayStudyNumber
+    store.sdict.lastLearnIndex = resolveLastLearnIndex(
+      store.sdict,
+      (group - 1) * store.sdict.perDayStudyNumber
+    )
     return createStudyTask().taskWords
   }
 
