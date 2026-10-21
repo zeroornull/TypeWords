@@ -28,15 +28,6 @@ const dictionaryUrl = computed(() => {
     : `https://dict.youdao.com/result?word=${word}&lang=en`
 })
 
-const isDesktop = computed(() => Boolean(useRuntimeConfig().public.isDesktop))
-const isExternalLookup = computed(
-  () => !isDesktop.value && !wordLookupState.loading && wordLookupState.notFound
-)
-const style = computed(() => ({
-  left: isExternalLookup.value ? '50%' : `${wordLookupState.x}px`,
-  top: isExternalLookup.value ? '50%' : `${wordLookupState.y}px`,
-}))
-
 const collectTarget = computed(() => {
   if (wordLookupState.data) return wordLookupState.data
   if (wordLookupState.queryWord) return getDefaultWord({ word: wordLookupState.queryWord })
@@ -53,6 +44,11 @@ const lookupEmptyCopy = computed(() =>
 
 const officialQueryDisabled = computed(() => lookupEmptyCopy.value === DESKTOP_WORD_QUERY_DISABLED_MESSAGE)
 const showLookupEmpty = computed(() => officialQueryDisabled.value || wordLookupState.notFound)
+const isExternalLookup = computed(() => !wordLookupState.loading && showLookupEmpty.value)
+const style = computed(() => ({
+  left: isExternalLookup.value ? '50%' : `${wordLookupState.x}px`,
+  top: isExternalLookup.value ? '50%' : `${wordLookupState.y}px`,
+}))
 
 function openCollect(e: MouseEvent) {
   e.stopPropagation()
@@ -181,7 +177,7 @@ watch(
                 type="button"
                 role="tab"
                 :aria-selected="activeDictionary === tab.value"
-                :aria-controls="isDesktop ? undefined : 'word-lookup-dictionary-panel'"
+                aria-controls="word-lookup-dictionary-panel"
                 :tabindex="activeDictionary === tab.value ? 0 : -1"
                 class="dictionary-tab"
                 @click="activeDictionary = tab.value"
@@ -193,7 +189,6 @@ watch(
             <a :href="dictionaryUrl" target="_blank" rel="noopener noreferrer" class="text-link">在新窗口打开</a>
           </div>
           <div
-            v-if="!isDesktop"
             id="word-lookup-dictionary-panel"
             role="tabpanel"
             :aria-labelledby="`word-lookup-tab-${activeDictionary}`"

@@ -86,7 +86,7 @@ export const DESKTOP_ONLINE_FEATURES: readonly DesktopOnlineFeature[] = [
   {
     id: 'external-dictionary-lookup',
     desktop: 'enabled',
-    note: 'Official not-found UI embeds youdao/iciba iframe on web. Desktop keeps frame-src none and opens dict.youdao.com / www.iciba.com via the allowlisted opener only.',
+    note: 'Official not-found UI embeds youdao/iciba iframe. Dest matches that in-app panel. frame-src is only dict.youdao.com and www.iciba.com; the main document stays local. Optional 在新窗口打开 still uses the allowlisted opener.',
   },
   {
     id: 'bundled-dict-lists',

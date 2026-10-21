@@ -70,3 +70,20 @@ test('internal build launches native Windows x64 and explicitly disables signing
   assert.throws(() => internalBuildCommand('linux', 'x64'), /Windows x64/)
   assert.throws(() => internalBuildCommand('win32', 'arm64'), /Windows x64/)
 })
+
+// Dest-safe OSS-01 source lock: the unsigned internal bundle command must
+// stay a build-only path. Silent NSIS / invoke-setup would kill leftover
+// dest by process name. Do not set CARGO_TARGET_DIR; cargo stays
+// src-tauri/target when the Tauri CLI runs from src-tauri.
+test('unsigned internal bundle command does not install and does not override CARGO_TARGET_DIR', () => {
+  const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'))
+  const script = readFileSync(resolve(root, 'scripts/desktop-internal.mjs'), 'utf8')
+  assert.equal(pkg.scripts['desktop:bundle:internal'], 'node scripts/desktop-internal.mjs')
+  assert.doesNotMatch(script, /CARGO_TARGET_DIR/)
+  assert.doesNotMatch(script, /invoke-setup/)
+  assert.doesNotMatch(script, /Start-Process/)
+  assert.doesNotMatch(script, /\/S \/NS \/D=/)
+  assert.doesNotMatch(script, /TypeWords_.*_x64-setup\.exe/)
+  assert.match(script, /Building UNSIGNED internal NSIS installer/)
+  assert.match(script, /--no-sign/)
+})

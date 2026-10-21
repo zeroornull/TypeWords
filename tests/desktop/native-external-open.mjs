@@ -24,7 +24,9 @@ const observeFile = resolve(evidence, `${stem}-observe.json`)
 const report = { sha256: launch.sha256, url, webviewRequests: [], errors: [] }
 const asArray = value => (value == null ? [] : Array.isArray(value) ? value : [value])
 const hostPattern = new RegExp(host.replace(/\./g, '\\.'), 'i')
-const extraMarkers = host.includes('wjx.cn')
+const extraMarkers = host === 'github.com'
+  ? [new URL(url).pathname.replace(/^\//, '')]
+  : host.includes('wjx.cn')
   ? ['问卷', '问卷星', 'ev0W7fv']
   : host.includes('youdao.com')
     ? ['有道', 'youdao', '词典', 'Youdao', new URL(url).searchParams.get('word')].filter(Boolean)

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,7 +9,18 @@ import test from 'node:test'
 const root = process.env.TYPEWORDS_TEST_ROOT || process.cwd()
 const wrapper = resolve(root, 'scripts/invoke-setup.ps1')
 const testKeyRoot = 'HKCU:\\Software\\TypeWordsDesktopTest'
-const testKey = `${testKeyRoot}\\Uninstall\\TypeWords`
+const uninstallSuffix = '\\Uninstall\\TypeWords'
+
+function isolatedUninstallKey(slug) {
+  return `${testKeyRoot}\\${slug}-${process.pid}-${randomUUID()}${uninstallSuffix}`
+}
+
+function isolatedKeyRoot(uninstallKey) {
+  if (!uninstallKey.startsWith(`${testKeyRoot}\\`) || !uninstallKey.endsWith(uninstallSuffix)) {
+    throw new Error(`unexpected uninstall key: ${uninstallKey}`)
+  }
+  return uninstallKey.slice(0, -uninstallSuffix.length)
+}
 
 function runWrapper(args) {
   return spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', wrapper, ...args], {
@@ -16,31 +28,35 @@ function runWrapper(args) {
   })
 }
 
-function withTempSetup(fn) {
+function removeRegistryPath(path) {
+  spawnSync(
+    'powershell',
+    [
+      '-NoProfile',
+      '-Command',
+      `Remove-Item -LiteralPath '${path}' -Recurse -Force -ErrorAction SilentlyContinue`,
+    ],
+    { encoding: 'utf8' }
+  )
+}
+
+function withTempSetup(uninstallKey, fn) {
   const dir = mkdtempSync(join(tmpdir(), 'tw-invoke-setup-'))
   try {
     return fn(dir)
   } finally {
     rmSync(dir, { recursive: true, force: true })
-    spawnSync(
-      'powershell',
-      [
-        '-NoProfile',
-        '-Command',
-        `Remove-Item -LiteralPath '${testKeyRoot}' -Recurse -Force -ErrorAction SilentlyContinue`,
-      ],
-      { encoding: 'utf8' }
-    )
+    removeRegistryPath(isolatedKeyRoot(uninstallKey))
   }
 }
 
-function setDisplayVersion(version) {
+function setDisplayVersion(uninstallKey, version) {
   const result = spawnSync(
     'powershell',
     [
       '-NoProfile',
       '-Command',
-      `New-Item -Path '${testKey}' -Force | Out-Null; Set-ItemProperty -LiteralPath '${testKey}' -Name DisplayVersion -Value '${version}'`,
+      `New-Item -Path '${uninstallKey}' -Force | Out-Null; Set-ItemProperty -LiteralPath '${uninstallKey}' -Name DisplayVersion -Value '${version}'`,
     ],
     { encoding: 'utf8' }
   )
@@ -48,12 +64,13 @@ function setDisplayVersion(version) {
 }
 
 test('invoke-setup refuses an older setup when DisplayVersion is newer without launching NSIS', () => {
-  withTempSetup(dir => {
+  const testKey = isolatedUninstallKey('refuse-older')
+  withTempSetup(testKey, dir => {
     const older = join(dir, 'TypeWords_0.1.2_x64-setup.exe')
     const same = join(dir, 'TypeWords_0.1.3_x64-setup.exe')
     writeFileSync(older, 'dummy-setup')
     writeFileSync(same, 'dummy-setup')
-    setDisplayVersion('0.1.3')
+    setDisplayVersion(testKey, '0.1.3')
     const refusePath = join(dir, 'refuse.json')
     const allowPath = join(dir, 'allow.json')
     const refused = runWrapper([
@@ -116,10 +133,11 @@ test('invoke-setup refuses an older setup when DisplayVersion is newer without l
 })
 
 test('invoke-setup refuses a lower multi-digit setup without DryRun and still refuses with WithShortcuts', () => {
-  withTempSetup(dir => {
+  const testKey = isolatedUninstallKey('refuse-multidigit')
+  withTempSetup(testKey, dir => {
     const older = join(dir, 'TypeWords_0.1.9_x64-setup.exe')
     writeFileSync(older, 'dummy-setup')
-    setDisplayVersion('0.1.10')
+    setDisplayVersion(testKey, '0.1.10')
     const refusePath = join(dir, 'refuse-multidigit.json')
     const refused = runWrapper([
       '-Setup',
@@ -153,10 +171,11 @@ test('invoke-setup refuses a lower multi-digit setup without DryRun and still re
 // A second /D= is not a safe leftover-preserving upgrade while dest is
 // running. Dummy setup + test key only; do not launch dest or real NSIS.
 test('invoke-setup allows a second /D= on the shared uninstall key and still builds silent /S', () => {
-  withTempSetup(dir => {
+  const testKey = isolatedUninstallKey('second-d')
+  withTempSetup(testKey, dir => {
     const setup = join(dir, 'TypeWords_0.1.3_x64-setup.exe')
     writeFileSync(setup, 'dummy-setup')
-    setDisplayVersion('0.1.3')
+    setDisplayVersion(testKey, '0.1.3')
     const otherDest = join(dir, 'new-side-by-side')
     const resultPath = join(dir, 'second-d.json')
     const allowed = runWrapper([

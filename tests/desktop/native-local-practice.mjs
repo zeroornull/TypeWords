@@ -64,6 +64,14 @@ const snapshotPractice = () =>
 try {
   await page.goto('http://tauri.localhost/words')
   await ready()
+  await page.waitForFunction(
+    () => {
+      const base = document.querySelector('#__nuxt')?.__vue_app__?.config.globalProperties.$pinia?._s.get('base')
+      return (base?.sdict?.words?.length ?? 0) > 0
+    },
+    null,
+    { timeout: 20000 }
+  )
   const before = await snapshotPractice()
   report.before = before
   assert.equal(before.origin, 'http://tauri.localhost')

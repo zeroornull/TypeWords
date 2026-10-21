@@ -1,4 +1,4 @@
-// Explicit installed-WebView check: practice lookup → 在新窗口打开 dict.youdao.com.
+// Explicit installed-WebView check: practice lookup iframe + optional 在新窗口打开.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -219,7 +219,11 @@ try {
     iframeCount: document.querySelectorAll('.word-lookup-popover iframe').length,
   }))
   assert.match(report.popover.text, /桌面在线查询 API 未配置|暂未收录/)
-  assert.equal(report.popover.iframeCount, 0, 'Desktop must not embed youdao/iciba inside the WebView')
+  assert.equal(report.popover.iframeCount, 1, 'Desktop keeps the official in-app dictionary iframe')
+  assert.match(
+    (await page.locator('.word-lookup-popover iframe').getAttribute('src')) || '',
+    /https:\/\/dict\.youdao\.com\/result\?word=/
+  )
   const expectedUrl = `https://dict.youdao.com/result?word=${encodeURIComponent(report.lookupWord)}&lang=en`
   report.url = expectedUrl
   const marker = 'native-youdao-document'
@@ -262,7 +266,10 @@ try {
   assert.equal(page.url(), original)
   assert.equal(await page.evaluate(() => window.__externalDocumentMarker), marker)
   assert.deepEqual(createdPages, [], 'Host must not open a WebView page for Youdao')
-  assert.deepEqual(report.webviewRequests, [], 'youdao/iciba lookup pages must not load inside the privileged WebView')
+  assert.ok(
+    report.webviewRequests.every(url => /https:\/\/(dict\.youdao\.com|www\.iciba\.com)\b/i.test(url)),
+    'Lookup iframe may load youdao/iciba; other remote lookup hosts must not'
+  )
   assert.deepEqual(report.errors, [])
   assert.equal(await page.locator('.message.error').count(), 0)
   if (report.lookupWord && !extraMarkers.includes(report.lookupWord)) extraMarkers.push(report.lookupWord)

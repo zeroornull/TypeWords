@@ -86,6 +86,9 @@ test('internal unsigned bundle command stays --no-sign on the internal config', 
   const cmd = internalBuildCommand('win32', 'x64')
 
   assert.doesNotMatch(script, /TAURI_SIGNING_PRIVATE_KEY|plugin-updater|createUpdaterArtifacts/)
+  assert.doesNotMatch(script, /CARGO_TARGET_DIR|invoke-setup|Start-Process|\/S \/NS \/D=/)
+  const pkg = json('package.json')
+  assert.equal(pkg.scripts['desktop:bundle:internal'], 'node scripts/desktop-internal.mjs')
   assert.deepEqual(cmd.args.slice(1), [
     'build',
     '--target',
