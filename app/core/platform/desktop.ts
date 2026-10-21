@@ -28,6 +28,8 @@ export const EXTERNAL_HOSTS = [
   '2study.top',
   'enpuz.com',
   'www.youdao.com',
+  'dict.youdao.com',
+  'www.iciba.com',
   'v.wjx.cn',
   'www.google.cn',
   'chromewebstore.google.com',

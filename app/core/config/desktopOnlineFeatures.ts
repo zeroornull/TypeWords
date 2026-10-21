@@ -84,6 +84,11 @@ export const DESKTOP_ONLINE_FEATURES: readonly DesktopOnlineFeature[] = [
     note: 'Online enhancement. PronunciationApi remains https://dict.youdao.com/dictvoice.',
   },
   {
+    id: 'external-dictionary-lookup',
+    desktop: 'enabled',
+    note: 'Official not-found UI embeds youdao/iciba iframe on web. Desktop keeps frame-src none and opens dict.youdao.com / www.iciba.com via the allowlisted opener only.',
+  },
+  {
     id: 'bundled-dict-lists',
     desktop: 'enabled-local',
     note: 'DICT_LIST uses empty RESOURCE_URL plus /list/*.json. Not a remote dynamic catalog service.',

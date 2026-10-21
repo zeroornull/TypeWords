@@ -94,6 +94,8 @@ test('External opener accepts existing HTTPS destinations and rejects scheme/hos
   const { api, calls } = fixture()
   await api.openExternal('https://github.com/zyronon/TypeWords')
   await api.openExternal('mailto:zyronon@163.com')
+  await api.openExternal('https://dict.youdao.com/result?word=test&lang=en')
+  await api.openExternal('https://www.iciba.com/word?w=test')
   for (const value of [
     'http://github.com/',
     'javascript:alert(1)',
@@ -113,6 +115,8 @@ test('External opener accepts existing HTTPS destinations and rejects scheme/hos
   assert.deepEqual(calls, [
     ['open', 'https://github.com/zyronon/TypeWords'],
     ['open', 'mailto:zyronon@163.com'],
+    ['open', 'https://dict.youdao.com/result?word=test&lang=en'],
+    ['open', 'https://www.iciba.com/word?w=test'],
   ])
 })
 
@@ -182,6 +186,8 @@ test('Desktop anchors, middle-click and window.open use browser; internal links 
     return event
   }
   assert.equal(click('https://www.youdao.com/result?word=test').prevented, true)
+  assert.equal(click('https://dict.youdao.com/result?word=test&lang=en').prevented, true)
+  assert.equal(click('https://www.iciba.com/word?w=test').prevented, true)
   assert.equal(click('mailto:zyronon@163.com').prevented, true)
   assert.equal(click('https://github.com/zyronon/TypeWords', 'auxclick', 1).prevented, true)
   assert.equal(click('http://tauri.localhost/words').prevented, undefined)
@@ -193,6 +199,8 @@ test('Desktop anchors, middle-click and window.open use browser; internal links 
   win.open('/words')
   assert.deepEqual(opened, [
     'https://www.youdao.com/result?word=test',
+    'https://dict.youdao.com/result?word=test&lang=en',
+    'https://www.iciba.com/word?w=test',
     'mailto:zyronon@163.com',
     'https://github.com/zyronon/TypeWords',
     'https://enpuz.com/',

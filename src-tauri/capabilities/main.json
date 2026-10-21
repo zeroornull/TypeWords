@@ -25,6 +25,12 @@
           "url": "https://www.youdao.com/*"
         },
         {
+          "url": "https://dict.youdao.com/*"
+        },
+        {
+          "url": "https://www.iciba.com/*"
+        },
+        {
           "url": "https://v.wjx.cn/*"
         },
         {

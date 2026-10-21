@@ -52,6 +52,7 @@ test('native production CSP is explicit and keeps development exceptions separat
   assert.equal(csp['default-src'], "'self'")
   assert.equal(csp['script-src'], "'self'")
   assert.equal(csp['object-src'], "'none'")
+  assert.equal(csp['frame-src'], "'none'")
   assert.equal(csp['base-uri'], "'self'")
   assert.match(csp['media-src'], /blob:/)
   assert.match(csp['media-src'], /https:\/\/dict\.youdao\.com/)

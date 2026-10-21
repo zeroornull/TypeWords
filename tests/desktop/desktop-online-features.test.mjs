@@ -44,6 +44,7 @@ test('official P1-02 desktop online list is the named enable/disable inventory',
       ['service-worker', 'disabled'],
       ['remote-google-fonts', 'disabled'],
       ['youdao-pronunciation', 'enabled'],
+      ['external-dictionary-lookup', 'enabled'],
       ['bundled-dict-lists', 'enabled-local'],
       ['allowlisted-hosts-without-new-dest-entry', 'inventory-only'],
     ]
@@ -112,6 +113,12 @@ test('existing desktop gates match the official enable/disable list', () => {
   assert.match(popover, /resolveWordLookupEmptyCopy/)
   assert.match(popover, /lookupEmptyCopy/)
   assert.doesNotMatch(popover, /暂未收录该单词/)
+  assert.match(popover, /dict\.youdao\.com\/result/)
+  assert.match(popover, /www\.iciba\.com\/word/)
+  assert.match(popover, /在新窗口打开/)
+  assert.match(popover, /v-if="!isDesktop"/)
+  assert.match(popover, /class="dictionary-frame"/)
+  assert.ok(popover.indexOf('v-if="!isDesktop"') < popover.indexOf('class="dictionary-frame"'))
   assert.match(hook, /isDesktopWordQueryEnabled/)
   assert.match(hook, /DESKTOP_WORD_QUERY_DISABLED_MESSAGE/)
   assert.ok(hook.indexOf('isDesktopWordQueryEnabled') < hook.indexOf('resolveWordLookup(rawWord)'))

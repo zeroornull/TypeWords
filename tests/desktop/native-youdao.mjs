@@ -1,4 +1,4 @@
-// Explicit installed-WebView check: practice lookup → 有道词典.
+// Explicit installed-WebView check: practice lookup → 在新窗口打开 dict.youdao.com.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -151,7 +151,12 @@ let watch
 try {
   page.on('pageerror', error => report.errors.push(error.message))
   page.on('request', request => {
-    if (/^https:\/\/www\.youdao\.com\b/i.test(request.url())) report.webviewRequests.push(request.url())
+    if (
+      /https:\/\/(www\.youdao\.com|dict\.youdao\.com|www\.iciba\.com)\b/i.test(request.url()) &&
+      !/dictvoice/i.test(request.url())
+    ) {
+      report.webviewRequests.push(request.url())
+    }
   })
   await page.goto('http://tauri.localhost/words')
   await ready(page)
@@ -204,14 +209,18 @@ try {
   assert.equal(report.identity.ipc, true)
   report.lookupWord = (await clickable.innerText()).trim()
   await clickable.click()
-  const youdaoButton = page.locator('.word-lookup-popover').getByText('有道词典', { exact: true })
-  await youdaoButton.waitFor({ state: 'visible', timeout: 10000 })
+  const youdaoTab = page.locator('.word-lookup-popover').getByRole('tab', { name: '有道词典' })
+  const openLink = page.locator('.word-lookup-popover').getByRole('link', { name: '在新窗口打开' })
+  await youdaoTab.waitFor({ state: 'visible', timeout: 10000 })
+  await openLink.waitFor({ state: 'visible', timeout: 10000 })
   report.popover = await page.evaluate(() => ({
     visible: !!document.querySelector('.word-lookup-popover'),
     text: document.querySelector('.word-lookup-popover')?.textContent || '',
+    iframeCount: document.querySelectorAll('.word-lookup-popover iframe').length,
   }))
-  assert.match(report.popover.text, /暂未收录该单词/)
-  const expectedUrl = `https://www.youdao.com/result?word=${encodeURIComponent(report.lookupWord)}&lang=en`
+  assert.match(report.popover.text, /桌面在线查询 API 未配置|暂未收录/)
+  assert.equal(report.popover.iframeCount, 0, 'Desktop must not embed youdao/iciba inside the WebView')
+  const expectedUrl = `https://dict.youdao.com/result?word=${encodeURIComponent(report.lookupWord)}&lang=en`
   report.url = expectedUrl
   const marker = 'native-youdao-document'
   await installProbe(page, marker)
@@ -227,7 +236,7 @@ try {
     await new Promise(resolveWait => setTimeout(resolveWait, 150))
   }
   const original = page.url()
-  await youdaoButton.click()
+  await openLink.click()
   await page.waitForFunction(
     () => {
       const probe = window.__externalOpenProbe
@@ -246,14 +255,14 @@ try {
   report.observe = observe
   const invoke = asArray(probe.invokes).find(item => item.command === 'plugin:opener|open_url')
   const fetched = asArray(probe.fetches).find(item => item.ok)
-  assert.ok(invoke || fetched, '有道词典 must call the native opener')
+  assert.ok(invoke || fetched, '在新窗口打开 must call the native opener')
   if (invoke) {
-    assert.match(String(invoke.args?.url || ''), /https:\/\/www\.youdao\.com\/result\?word=/)
+    assert.match(String(invoke.args?.url || ''), /https:\/\/dict\.youdao\.com\/result\?word=/)
   }
   assert.equal(page.url(), original)
   assert.equal(await page.evaluate(() => window.__externalDocumentMarker), marker)
   assert.deepEqual(createdPages, [], 'Host must not open a WebView page for Youdao')
-  assert.deepEqual(report.webviewRequests, [], 'www.youdao.com must not load inside the privileged WebView')
+  assert.deepEqual(report.webviewRequests, [], 'youdao/iciba lookup pages must not load inside the privileged WebView')
   assert.deepEqual(report.errors, [])
   assert.equal(await page.locator('.message.error').count(), 0)
   if (report.lookupWord && !extraMarkers.includes(report.lookupWord)) extraMarkers.push(report.lookupWord)
@@ -287,7 +296,7 @@ try {
   }
   report.passed = true
   console.log(
-    `PASS: practice lookup 有道词典 opened ${expectedUrl}; system browser evidence processes=${processHits.length} tabs=${tabHits.length} retargeted=${retargetHits.length} windows=${windowHits.length} existing=${existingHits.length}; main document retained.`
+    `PASS: practice lookup 在新窗口打开 opened ${expectedUrl}; system browser evidence processes=${processHits.length} tabs=${tabHits.length} retargeted=${retargetHits.length} windows=${windowHits.length} existing=${existingHits.length}; main document retained.`
   )
 } finally {
   context.off('page', onPage)
