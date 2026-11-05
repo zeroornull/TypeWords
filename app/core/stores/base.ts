@@ -217,7 +217,7 @@ export const useBaseStore = defineStore('base', {
         : null
       //把其他的词典的单词数据都删掉，全保存在内存里太卡了
       this.word.bookList.slice(3).map(v => {
-        if (!v.custom) {
+        if (!v.custom && v !== val) {
           v.words = shallowReactive([])
         }
       })
@@ -250,7 +250,7 @@ export const useBaseStore = defineStore('base', {
     async changeBook(val: Dict) {
       //把其他的书籍里面的文章数据都删掉，全保存在内存里太卡了
       this.article.bookList.slice(1).map(v => {
-        if (!v.custom) {
+        if (!v.custom && v !== val) {
           v.articles = shallowReactive([])
         }
       })

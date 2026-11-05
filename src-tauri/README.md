@@ -1,74 +1,113 @@
-# TypeWords Windows 桌面端（开发与内部测试）
+# TypeWords Windows 桌面开发与本地预览
 
-更新：2026-09-19。保留现有 Nuxt/Vue、IndexedDB 和 ZIP 数据格式，使用 Tauri 2 内嵌桌面静态 SPA。宿主只有一个本地窗口，没有自定义 command、通用原生网络代理或更新器；已接入 dialog、fs、opener 插件及内部 NSIS 构建，正式发布验收未完成。
+更新：2026-11-05。本文是当前 Tauri 桌面的开发入口与唯一验收状态来源；历史迁移日志不再承担执行指令。桌面复用 Nuxt/Vue、Pinia、IndexedDB 与 ZIP 格式，由 Tauri 2 内嵌静态 SPA，生产运行不需要 Node.js 或常驻 Nuxt 服务。
 
-**这是实验性开源 Windows 预览，不是正式公开发布。** 安装包是未签名的内部/实验性 Windows x64 NSIS。使用前先导出 ZIP 备份。不要把唯一真实学习数据迁进默认 identifier 目录。不要用旧 setup 覆盖较新安装，升级请走仓库里的 `scripts/invoke-setup.ps1`。Win10 实机、干净机、代码签名和默认个人 profile 均未验证。桌面端云同步延后。
+## 当前范围
 
-**后续工作按[迁移计划](../docs/plans/tauri2-desktop-migration-plan.md)第5.1节 R1–R8执行。** 优先数据安全闭环、真实事务与原生验收，再冻结版本打包。计划/证据目录目前被 Git 忽略，干净检出可能没有这些本地文档。
+D10（2026-11-05）确定交付未签名 Windows x64 本地预览：开发机安装、随包单词/文章练习、切换设置后继续、正常重启保留数据、原生保存 ZIP、拒绝损坏 ZIP 且原数据不变、白名单外链进入系统浏览器、未授权访问被拒绝。桌面云同步按 D09 关闭，旧配置保留但不得触发请求。
 
-## 当前身份与验收状态
+这条交付线适用于 `src-tauri/`，实验性 `desktop-native/` Go 窗口是另一条开发线。当前预览不等于正式公开发布。使用前先导出备份，不要将唯一真实学习数据放入测试 profile；测试使用隔离 profile 与合成数据。
 
-2026-09-12 用户授权“按照主流来即可”后，首发确定为 Windows x64，主验收 Windows 11，最低兼容目标 Windows 10 22H2。正式 identifier 沿用 `io.github.zyronon.typewords`。Win10实机验证按用户要求暂缓，非通过；平台约定不等于兼容性通过。原生探测继续使用独立临时 WebView profile，不使用个人学习数据。
+## 环境与应用身份
 
-Windows 生产窗口配置使用 `http://tauri.localhost`（`useHttpsScheme: false`），没有自定义 `dataDirectory`。这两个配置与 identifier 一起影响持久化来源，首次原生数据验收后保持稳定。开发窗口使用 `http://127.0.0.1:5567`，它与生产窗口不是同一个存储来源；数据迁移使用 ZIP，不能用开发窗口数据是否出现判断生产持久化。
+- 构建环境：Windows x64、Node 24、pnpm、Rust MSVC、C++ Build Tools；运行需要 WebView2。
+- 本机验收系统为 Windows 11；Windows 10 22H2 是兼容目标，尚无本轮实机通过结论。
+- 应用版本 `0.1.3`，identifier 为 `io.github.zyronon.typewords`。
+- 生产来源 `http://tauri.localhost`，`useHttpsScheme: false`；正式配置不指定自定义 `dataDirectory`。
+- 开发来源 `http://127.0.0.1:5567` 与生产存储分离。使用 ZIP 迁移，不能以开发数据未出现在生产窗口判断持久化失败。
 
-## 命令
+## 开发与构建
 
-在具备 Windows Rust MSVC、C++ Build Tools 和 WebView2 的 Windows shell 中，从仓库根目录运行。原生 `node_modules` 必须由该平台的 pnpm 安装，不能复用 WSL 的 Linux 原生依赖。
+从仓库根目录的 Windows shell 执行。依赖须由本机 pnpm 安装，不能复用 WSL 的 Linux 原生依赖。
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm run test:desktop
-# Independent tree + lockfile install + regression (does not reuse this checkout's node_modules).
-pnpm run test:desktop:clean-install
-# beforeDevCommand 自动启动既有桌面前端。
 pnpm run desktop:dev
-# 编译内嵌静态资源的可执行文件，不生成安装包。
-pnpm run desktop:build
-# 重建前端/EXE并生成未签名Windows x64 NSIS内部测试包。
+```
+
+`desktop:dev` 是长驻交互服务，自动启动桌面前端。Web 开发仍使用 `pnpm run dev`。
+
+提交候选前使用现有本地门禁：
+
+```powershell
+pnpm run test
+pnpm run typecheck
+pnpm run desktop:check-resources
+node node_modules/prettier/bin/prettier.cjs --check src-tauri/README.md AGENTS.md
+```
+
+格式命令的明确文件列表应随实际改动调整。没有 `pnpm lint`。独立真实 IndexedDB 测试入口为 `pnpm run test:desktop:idb`，需要外部可解析的 Playwright 与 Edge；它与默认 Node 回归、原生 WebView 验收分别报告。
+
+Web 与 Desktop 共用 `.nuxt` / `.output`，构建必须串行：
+
+```powershell
+pnpm run generate
 pnpm run desktop:bundle:internal
+```
+
+`desktop:bundle:internal` 使用 Windows 原生工具链，重建桌面静态资源、运行资源审计并生成未签名 NSIS。只需 EXE 时使用 `pnpm run desktop:build`。输出路径以实际日志为准；显式 target 构建通常位于 `src-tauri/target/x86_64-pc-windows-msvc/release/`。
+
+Rust 检查可单独执行，列出命令不表示最新候选已逐项重跑：
+
+```powershell
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo check --locked --manifest-path src-tauri/Cargo.toml
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
-Web 仍用 `pnpm run dev` / `pnpm run build`。两种前端构建共用 `.nuxt` / `.output`，保持串行。`desktop:build` 在编译前自动运行资源门禁和 `nuxt generate`；不要跳过这一步把 Web SSR 输出打进宿主。
+## 安装与数据保护
 
-以上是命令清单，不是一次性顺序执行脚本，`desktop:dev`会保持交互服务运行。打包输出路径以实际日志为准，显式target构建可能位于`target/x86_64-pc-windows-msvc/`。列出Rust检查命令不表示它们均在最新候选重跑。
+安装/升级走仓库包装脚本，先正常退出正在运行的 TypeWords。NSIS 按进程名关闭宿主，另选安装目录也不能保留另一个运行中的实例。
 
-第三十一批本地回归243/243，但部分测试读取被忽略的本地fixture/历史报告，干净检出可复现仍待修复。`pnpm run typecheck`最近结果仍为第三十批62条既有诊断及vue-router/volar导出问题，退出码2，不是通过。不得把历史证据文件校验称为本轮实时UI测试。
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/invoke-setup.ps1 -Setup "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/TypeWords_0.1.3_x64-setup.exe" -Dest "$env:LOCALAPPDATA\Programs\TypeWords-preview"
+```
 
-独立真实存储测试：`pnpm run test:desktop:idb`。需要可解析的 Playwright 和已安装的 Edge；也可用 `TYPEWORDS_PLAYWRIGHT_MODULE` 指向外部 Playwright 的 `index.mjs`，用 `TYPEWORDS_BROWSER_CHANNEL` 指定其他已安装的浏览器 channel。未将 Playwright 添加为项目依赖，不声明该命令已在干净 CI 环境复现。
+`-Dest` 应选择明确的预览安装目录；安装目录与 WebView 数据 profile 是不同概念。包装脚本根据登记的 `DisplayVersion` 拒跑旧安装包；直接调用旧 NSIS 仍可能覆盖较新版本。需要快捷方式时显式加 `-WithShortcuts`。
 
-该入口临时启动仅允许白名单测试文件的 loopback 服务，使用全新浏览器 context，阻止非本源网络请求；结束时关闭浏览器和服务并清理随机命名的测试数据库。四个场景验证真实 IndexedDB/idb-keyval 多键事务 abort、重开、缓存迁移、内存恢复与队列重试；词典/设置迁移器、store 方法和云客户端仍是替身，不替代完整 Pinia watcher、ZIP UI、quota 或原生 WebView 验收。测试音频只是合成 Blob 字节。
+安装包为 `currentUser`，WebView2 策略是 `downloadBootstrapper`，不是完整离线运行时安装包。开发机已有 WebView2 的安装成功不证明缺运行时或干净机可安装。不要删除默认 identifier 数据目录来“修复”验收失败。
 
-## 当前边界
+原生保存取消或写入失败不得报告成功；损坏 ZIP 必须在写入前拒绝并保留原数据。
 
-- `app.security.capabilities` 显式选择 `main`；授权保存对话框、文件写入命令及限定HTTPS目标的opener。没有通用shell/原生HTTP权限。选择路径作用域与未授权请求拒绝仍须T09原生验收。
-- 生产 CSP 允许本地脚本、随包资源、Blob 音频、有道/百度发音目标及`https://*.supabase.co`同步连接。开发 CSP 另外允许 Nuxt/Vite 的内联脚本、eval 和本地 WebSocket。CSP允许连接不证明服务权限或同步成功。
-- Rust独立拒绝远程导航和新窗口，JS侧也校验外链；正常外链应进入系统浏览器，未信任页面不得装入有原生权限的窗口。完整T09仍未执行。
-- 原生T01–T05已有部分输入、播放、路由和恢复证据；物理键盘/系统IME、英语实听、系统断网冷启动等仍待，不以旧证据或编译代替最新候选验收。
-- 桌面同步仅接受托管Supabase域，真实数据安全模型/权限及真服务验收未完成；当前代码按type操作，不能把匿名开放测试表当作真实学习数据安全方案。自定义域不在本轮范围。
-- 桌面在线查询API必须显式构建配置，默认禁用；百度开发代理不进入静态包。未配置同步时本地基础练习应可独立使用。
-- 图标由仓库现有 `public/favicon.ico` 转换，未更换产品视觉资产。
+## 当前验收状态
 
-第二十八批已重建release EXE，尚未启动原生验收。第二十三批旧0.1.0 NSIS不包含第二十四至二十八批修复；历史0.1.1只是升级测试overlay，不表示源码已升版。打包前统一版本和源码/前端/EXE/NSIS哈希，升级候选版本高于实际测试起点。
+**D10 本地预览：10 / 10，已完成本轮验收。** 状态按本轮已安装候选的实际证据更新；正式公开发布仍未完成，完整发布矩阵不作为本轮退出条件。
 
-`tauri.internal.conf.json`是当前用户NSIS安装、禁止降级、`downloadBootstrapper`，不是完整WebView2离线安装包。缺运行时下载成功/失败、干净机及中文用户名仍待验证；已有运行时的离线运行另测。未签名包只称内部测试包。自动更新、其他OS、SQLite及完整离线TTS不属于本轮。
+| ID    | D10 验收内容                  | 状态   | 已观察到的结果                                                                           |
+| ----- | ----------------------------- | ------ | ---------------------------------------------------------------------------------------- |
+| P0-01 | 平台、架构与应用身份          | 已完成 | Windows x64；固定 identifier 与生产来源                                                  |
+| P0-02 | 本地类型与基线                | 已完成 | 执行方报告 typecheck exit 0；日志无 TS 错误输出                                          |
+| P0-03 | 可运行的本地回归              | 已完成 | 815/815；失败、跳过、取消均为 0                                                          |
+| P1-01 | 串行 Web/Desktop 构建         | 已完成 | Web generate 与内部桌面打包 exit 0                                                       |
+| P1-02 | 资源审计与随包内容            | 已完成 | 审计无错误；实际加载 CET4 2607 词、NCE1 5 篇                                             |
+| P2-01 | 已安装生产宿主                | 已完成 | 安装 exit 0，版本 0.1.3；隔离 profile 下运行于 tauri.localhost                           |
+| P2-02 | 练习、设置与正常重启持久化    | 已完成 | 随包 20 词/NCE1 5 句及设置切换；重启前后 IndexedDB 与内存状态一致                        |
+| P3-01 | 原生保存、拒坏 ZIP 与数据保护 | 已完成 | 真实原生 ZIP 保存与 CRC/内容校验通过；损坏 ZIP 被拒绝，五键及内存状态不变                |
+| P3-02 | 外链、最小权限与云同步关闭    | 已完成 | GitHub 外链进入系统 Chrome；主窗口保持本地；ACL 拒绝未授权访问；同步标签关闭且无同步请求 |
+| P4-01 | 未签名 NSIS 开发机安装        | 已完成 | 当前安装包安装与启动成功，安装产物哈希已关联                                             |
 
-## 历史隔离原生探测（不代表当前全部状态）
+P2-02 的重启报告记录 PID 变化后 CET4 `lastLearnIndex=20`、错词数 34、音量 37 的内存与持久化值相同；旧同步配置仍存在但无同步请求。P3-02 的安全报告记录 9 类未授权 IPC 被拒绝、远程导航和新窗口未取代本地主文档。本机 HTTP 导航探测收到一次请求，因此不声称“零网络请求”。
 
-第七批直接测试 Windows WebView2 生产资源协议，而非 Chrome 静态服务器。进程级环境变量指定新建临时 WebView profile，启动时核对父进程、实际 `--user-data-dir` 和调试端口；结束时正常关闭窗口并确认该 profile 的 WebView 进程及端口退出。正式配置没有加入调试端口或自定义数据目录。
+本轮修复了直接练习路由加载官方内容后被清空的问题：`changeDict` / `changeBook` 释放其他官方数组时跳过传入的同一对象。reactive store 行为回归覆盖选中内容、进度/统计、自定义数据保留及其他官方数据释放。收藏选择器的词书 ID 同时规范为字符串；原生练习 runner 以实际 DOM 转换推进，并禁止自定义文章回退代替 NCE1。
 
-已验证练习页重载、正常退出/重启后的词书/设置/缓存恢复，以及真实例句按钮的无音色/无目标语言结束提示。TTS 音色发现最多等待 1500ms；匹配请求语言，已明确保存的音色仍优先。没有英语音色的设备不宣称英语发音通过；人工听音、输入法、完整 20 词/5 句、开发窗口和安装器仍待验收。
+## 当前候选与证据索引
 
-脚本、实际 EXE 位置、测试数据目录、已知字体 CSP 问题与回退证据见 [第七批 VERIFICATION](../docs/plans/evidence/tauri2-native-smoke/VERIFICATION.txt)。
+以下链接是本地验收产物，位于 Git 忽略的 `docs/plans/evidence/tauri2-install-lifecycle/`，干净检出不会带这些日志、报告或二进制。上表保留观察结论；重新验收应生成新报告，不能把缺失本地报告视为可重放证据。
 
-## 第八批：字体与网络失败（2026-09-12）
+- [构建与安装包身份](../docs/plans/evidence/tauri2-install-lifecycle/build-114.json)：`TypeWords_0.1.3_x64-setup.exe`，11,736,670 字节，SHA256 `92dc9f8812571535c85e8eb8f53c8cfbf80a739ec5b9293ae1052248a3a3aa30`。
+- [实际安装 EXE 身份](../docs/plans/evidence/tauri2-install-lifecycle/installed-exe-114.json)：20,149,248 字节，SHA256 `fce567bc14917a389def7697dfef3cd7c14f6e48e5636635ac0cdcc127434399`。NSIS 元数据修补可使安装 EXE 与打包前 EXE 不同，原生报告绑定实际安装哈希。
+- [本轮汇总与边界](../docs/plans/evidence/tauri2-install-lifecycle/VERIFICATION-114-final.txt)记录 D10 本地预览验收完成，并保留正式发布边界。
+- 本地门禁：[最后一次完整回归](../docs/plans/evidence/tauri2-install-lifecycle/tests-114-final-harness.log)在最终 harness 修改后 815/815、exit 0；[类型](../docs/plans/evidence/tauri2-install-lifecycle/typecheck-114.log)、[资源](../docs/plans/evidence/tauri2-install-lifecycle/resources-114.log)；构建退出码见构建身份报告。
+- 安装与运行：[安装](../docs/plans/evidence/tauri2-install-lifecycle/install-114.json)、[启动](../docs/plans/evidence/tauri2-install-lifecycle/launch.json)、[20 词与设置切换](../docs/plans/evidence/tauri2-install-lifecycle/native-local-practice-matrix-114.json)、[正常重启](../docs/plans/evidence/tauri2-install-lifecycle/restart-114.json)。词矩阵中的文章字符串有截断，不用于完整 NCE1 五句验收。
+- 文章验收单独见 [NCE1 原生逐词/DOM 证明](../docs/plans/evidence/tauri2-install-lifecycle/native-nce1-114.json)及[完整五句结果](../docs/plans/evidence/tauri2-install-lifecycle/native-nce1-114-clean.log)：与随包源句一致，实际完成 5 句，错误输入与运行错误均为 0。
+- 桌面边界：[同步关闭](../docs/plans/evidence/tauri2-install-lifecycle/sync-tab-114.json)、[权限与导航](../docs/plans/evidence/tauri2-install-lifecycle/native-security-114.json)、[系统浏览器外链](../docs/plans/evidence/tauri2-install-lifecycle/native-external-open-114.json)。
+- 数据保护：[真实原生保存与拒坏 ZIP](../docs/plans/evidence/tauri2-install-lifecycle/corrupt-zip-114-headed-final.json)、[物理输入授权与 C-ABI 操作](../docs/plans/evidence/tauri2-install-lifecycle/native-save-headed-driver-114.json)、[ZIP 内容与对话框关闭](../docs/plans/evidence/tauri2-install-lifecycle/native-export-content-114.json)。真实导出文件为 71,511 字节，包含 `data.json` 和测试音频；导出及拒坏 ZIP 后五个持久化键与内存状态均保持不变。
 
-桌面构建不加载 Web 专用 Garamond `@font-face`，沿用 Garamond / Georgia / Times New Roman / serif 系统字体栈；Web 保留原远程字体声明。开发、生产 WebView 首页均实测没有远程字体请求或 font-src 违规，当前机器使用系统 Garamond / Noto Serif SC，不表示每台机器安装相同字体。CSP 字节未变。
+## 后续发布
 
-单词网络播放捕获拒绝与同步异常，8 秒无播放进度后回退 TTS，进度前进时重置等待；结束、回退、取消清理事件与计时器。新 EXE 的20次网络阻断与实际媒体请求悬挂回退已验证，无英语声色时明确提示并继续手动练习。开发窗口通过 cargo dev-profile 宿主连接桌面 Nuxt 服务验证，尚未把该组合探测记成完整 `pnpm desktop:dev` 启动器验收。
+正式公开发布另需定义并验证签名、干净机/WebView2、Windows 10、性能预算、分发与升级策略。物理 IME、人耳听感、网卡断开冷启动、真实配额、真实云同步、GitHub-hosted Actions、更新器及其他 OS 均未由本轮预览证明。云同步恢复必须由用户明确重新授权，不能按旧日志自动恢复接线。
 
-旧 EXE 的20个唯一词键入与进程级离线重载证据保留版本边界。英语实听、物理输入法、完整断网冷启动、最低版本实机和完整开发/生产矩阵仍待完成。证据见 [第八批 VERIFICATION](../docs/plans/evidence/tauri2-font-offline/VERIFICATION.txt)。
+## 历史记录
+
+旧迁移计划、OSS 验收条、完整正式验收矩阵与逐批记录已移至本地[计划归档](../docs/plans/archive/tauri2-desktop-migration-plan.md)及[实施日志归档](../docs/plans/archive/tauri2-desktop-migration-progress.md)。归档保留当时判断和指令供溯源，不是当前任务规范；历史计数与旧产物不得覆盖本文状态。归档同样不随干净检出分发。

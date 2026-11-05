@@ -1,4 +1,4 @@
-// Official T01 matrix on an isolated dest: built-in CET-4 System 3-phase + 5 article sentences.
+// Official T01 matrix on an isolated dest: built-in CET-4 System phases + 5 bundled NCE1 sentences.
 // Not part of the default Node suite. Does not use the default identifier dir.
 // Official T01/T03 dest-runner honesty:
 // Leftover dest SHA 99948E67 is pre-fix. Old dest lacks leftover id-match /
@@ -12,10 +12,8 @@ import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { isMaskedPracticeLetterText, resolveInstalledPracticeWord } from './native-local-practice-word.mjs'
 import {
   OFFICIAL_T01_ARTICLE_SENTENCE_COUNT,
-  OFFICIAL_T01_ARTICLE_SENTENCES,
   OFFICIAL_T01_BUILTIN_ARTICLE_BOOK,
   OFFICIAL_T01_BUILTIN_WORD_BOOK,
   OFFICIAL_T01_PRACTICE_TYPE,
@@ -47,6 +45,18 @@ const PRACTICE_TYPE_NAME = {
 }
 
 function phaseFromSources(sources) {
+  if (sources?.livePhase) {
+    const labels = [
+      ['followWrite', /跟写|follow.?write/i],
+      ['spell', /小组巩固|拼写|spell/i],
+      ['identify', /自测|identify/i],
+      ['listen', /听写|listen/i],
+      ['dictation', /默写|dictation/i],
+    ]
+    const match = labels.find(([, label]) => label.test(sources.livePhase))
+    assert.ok(match, `Unknown rendered phase: ${sources.livePhase}`)
+    return { practiceType: OFFICIAL_T01_PRACTICE_TYPE[match[0]], phase: match[0] }
+  }
   const cursor = sources?.cursor
   if (cursor && Number(cursor.nodeIndex) === 1) {
     if (Number(cursor.stepIndex) === 0) {
@@ -465,36 +475,20 @@ async function collectPracticeWordSources() {
   return page.evaluate(async () => {
     const letterText = document.querySelector('.typing-word .letter')?.textContent?.trim() || ''
     const bodyText = document.body?.innerText || ''
-    let propWord = ''
-    let providedWord = ''
-    let practiceType = null
-    let flowId = ''
-    let cursorFromVue = null
-    const seen = new Set()
-    const stack = [document.querySelector('#__nuxt')?.__vue_app__?._instance]
-    while (stack.length) {
-      const inst = stack.pop()
-      if (!inst || seen.has(inst)) continue
-      seen.add(inst)
-      const word = inst.props?.word
-      if (!propWord && typeof word?.word === 'string') propWord = word.word
-      if (typeof inst.props?.practiceType === 'number' && inst.props?.word) {
-        practiceType = inst.props.practiceType
-      }
-      const liveCursor = inst.setupState?.activeCursor
-      if (!cursorFromVue && liveCursor) cursorFromVue = liveCursor.value ?? liveCursor
-      const data = inst.provides?.practiceData
-      if (!providedWord && data?.words?.[data.index]?.word) providedWord = data.words[data.index].word
-      const flow = inst.provides?.activeFlowConfig
-      if (!flowId && flow?.id) flowId = flow.id
-      if (inst.subTree?.component) stack.push(inst.subTree.component)
-      const children = inst.subTree?.children
-      if (Array.isArray(children)) {
-        for (const child of children) {
-          if (child?.component) stack.push(child.component)
-        }
-      }
-    }
+    const typeWord = document.querySelector('.typing-word')?.__vueParentComponent
+    const activeWords = [...document.querySelectorAll('.panel .common-list-item.active .word')]
+    const renderedWord = activeWords.length === 1 ? activeWords[0].textContent.trim() : ''
+    const propWord = typeWord?.props?.word?.word || renderedWord
+    const providedWord = ''
+    const practiceType = typeWord?.props?.practiceType ?? null
+    const flowId = ''
+    const cursorFromVue = null
+    const livePhase = document.querySelector('.footer .name')?.textContent.trim() || ''
+    const liveProgress =
+      document.querySelector('.footer .stat .row .shrink-0')?.textContent.replace(/\s+/g, ' ').trim() || ''
+    const liveIdentity = JSON.stringify([propWord, livePhase, liveProgress])
+    const coreInput = document.querySelector('.typing-core .input')?.textContent || ''
+    const coreWrong = document.querySelector('.typing-core .wrong')?.textContent || ''
     const request = indexedDB.open('keyval-store')
     const db = await new Promise((resolveDb, reject) => {
       request.onsuccess = () => resolveDb(request.result)
@@ -521,6 +515,13 @@ async function collectPracticeWordSources() {
     const setting = pinia?._s.get('setting')
     return {
       letterText,
+      livePhase,
+      liveProgress,
+      liveIdentity,
+      coreInput,
+      coreWrong,
+      activeWordCount: activeWords.length,
+      wrongWordCount: base?.wrong?.words?.length ?? null,
       propWord,
       providedWord,
       cacheWord,
@@ -546,18 +547,12 @@ async function collectPracticeWordSources() {
 }
 
 async function resolveCurrentPracticeWord() {
-  let sources = await collectPracticeWordSources()
+  const sources = await collectPracticeWordSources()
   if (sources.statistics || sources.completeText) return { word: '', sources }
-  let word = resolveInstalledPracticeWord(sources)
-  if (!word && isMaskedPracticeLetterText(sources.letterText)) {
-    await page.keyboard.press(sources.showWordShortcut || 'Escape')
-    await pause(300)
-    sources = await collectPracticeWordSources()
-    sources.revealedLetterText = sources.letterText
-    word = resolveInstalledPracticeWord(sources)
-  }
-  assert.ok(word, `Expected a practice word, got ${JSON.stringify(sources.letterText)}`)
-  assert.notEqual(word.replace(/[_ \u00a0]/g, ''), '', 'Refusing masked practice letters')
+  assert.equal(sources.activeWordCount, 1, 'Expected exactly one rendered current word row')
+  const word = sources.propWord
+  assert.ok(word && /^[A-Za-z][A-Za-z' -]*$/.test(word), 'Expected the actual current session word')
+  assert.equal(sources.coreWrong, '', 'Refusing to continue over an incorrect input')
   return { word, sources }
 }
 
@@ -590,65 +585,56 @@ async function collectArticleCursor() {
     )
     const currentDom = document.querySelector('.typing-article .word:not(.wrote)')
     const wroteCount = document.querySelectorAll('.typing-article .word.wrote').length
+    const completedSentenceNodes = [...document.querySelectorAll('.typing-article .sentence')].filter(node => {
+      const words = [...node.querySelectorAll('.word')]
+      return words.length > 0 && words.every(word => word.classList.contains('wrote'))
+    })
     return {
       cursor,
       word: token?.word || currentDom?.textContent?.trim() || '',
       type: token?.type,
-      nextSpace: token?.nextSpace,
+      nextSpace: token?.nextSpace ?? !!currentDom?.querySelector(':scope > .word-end'),
       sentenceText: sentence?.text || domSentences[cursor?.sentenceIndex || 0] || '',
       sectionCount: article?.sections?.length || document.querySelectorAll('.typing-article .section').length,
       sentenceCount: article?.sections?.[0]?.length || domSentences.length,
       wroteCount,
-      finishedDomSentences: [...document.querySelectorAll('.typing-article .sentence')].filter(node => {
-        const words = [...node.querySelectorAll('.word')]
-        return words.length > 0 && words.every(word => word.classList.contains('wrote'))
-      }).length,
+      wrongInputCount: document.querySelectorAll('.typing-article .input-wrong, .typing-article .word-space.wrong')
+        .length,
+      finishedDomSentences: completedSentenceNodes.length,
+      completedSentenceTexts: completedSentenceNodes.map(node =>
+        [...node.querySelectorAll('.word')]
+          .map(word => word.textContent.trim())
+          .join(' ')
+          .replace(/\s+([,.!?;:])/g, '$1')
+      ),
       isEnd: cursor ? !article?.sections?.[cursor.sectionIndex]?.[cursor.sentenceIndex] : !currentDom && wroteCount > 0,
     }
   })
 }
 
 async function toggleTranslate() {
-  const before = await page.evaluate(() => {
-    const pinia = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia
-    return pinia._s.get('setting').translate
-  })
+  const visible = () =>
+    page.locator('.typing-word .word-meta .translate').evaluate(node => getComputedStyle(node).opacity !== '0')
+  const before = await visible()
   await page.keyboard.press('Control+Z')
-  await pause(400)
-  let after = await page.evaluate(() => {
-    const pinia = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia
-    return {
-      translate: pinia._s.get('setting').translate,
-      volume: pinia._s.get('setting').wordSoundVolume,
-    }
-  })
-  let method = 'shortcut'
-  if (after.translate === before) {
-    after = await page.evaluate(() => {
-      const pinia = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia
-      const setting = pinia._s.get('setting')
-      setting.translate = !setting.translate
-      return {
-        translate: setting.translate,
-        volume: setting.wordSoundVolume,
-      }
-    })
-    method = 'pinia'
-    await pause(400)
-  }
-  return { key: 'translate', before, after: after.translate, volume: after.volume, method }
+  await page.waitForFunction(previous => {
+    const node = document.querySelector('.typing-word .word-meta .translate')
+    return node && (getComputedStyle(node).opacity !== '0') !== previous
+  }, before)
+  const after = await visible()
+  const volume = await page.evaluate(
+    () => document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('setting').wordSoundVolume
+  )
+  return { key: 'translate', before, after, volume, method: 'shortcut', observed: 'rendered translation opacity' }
 }
 
-async function waitForWordAdvance(beforeCount, previousWord) {
+async function waitForWordAdvance(previousIdentity) {
   const deadline = Date.now() + 8000
   while (Date.now() < deadline) {
     const sources = await collectPracticeWordSources()
     if (sources.statistics || sources.completeText) return { advanced: true, complete: true, sources }
-    const current = resolveInstalledPracticeWord(sources)
-    const count = sources.inputWordNumber ?? 0
-    if (current && current !== previousWord) return { advanced: true, complete: false, sources, word: current }
-    if (count > beforeCount && current && current !== previousWord) {
-      return { advanced: true, complete: false, sources, word: current }
+    if (sources.propWord && sources.liveIdentity !== previousIdentity && !sources.coreInput && !sources.coreWrong) {
+      return { advanced: true, complete: false, sources, word: sources.propWord }
     }
     await pause(120)
   }
@@ -660,6 +646,8 @@ async function typePracticeItem(word, sources) {
   const practiceType = resolved.practiceType
   if (practiceType === OFFICIAL_T01_PRACTICE_TYPE.identify) {
     await page.keyboard.press('1')
+    await page.waitForSelector('.typing-word .typing-core .input', { timeout: 5000 })
+    await page.keyboard.press('Space')
     return practiceType
   }
   for (let i = 0; i < 20; i++) {
@@ -705,11 +693,12 @@ async function openBuiltinWordPractice() {
   return { loaded: false, timeout: true, ...last }
 }
 
-async function openArticlePractice(preferredId, fallbackId) {
-  await page.goto(`http://tauri.localhost/practice-articles/${preferredId}`, {
+async function openArticlePractice(id) {
+  await page.goto(`http://tauri.localhost/practice-articles/${id}`, {
     waitUntil: 'domcontentloaded',
   })
   const deadline = Date.now() + 20000
+  let last = null
   while (Date.now() < deadline) {
     const state = await page.evaluate(() => {
       const pinia = document.querySelector('#__nuxt')?.__vue_app__?.config.globalProperties.$pinia
@@ -720,26 +709,20 @@ async function openArticlePractice(preferredId, fallbackId) {
         hasArticle: !!document.querySelector('.typing-article'),
         miss: text.includes('词库资源无法加载') || text.includes('没有文章可学习！'),
         id: base?.sbook?.id,
+        enName: base?.sbook?.enName,
+        url: base?.sbook?.url,
+        language: base?.sbook?.language,
         custom: base?.sbook?.custom,
         articleCount: base?.sbook?.articles?.length ?? 0,
         title: base?.sbook?.articles?.[0]?.title || '',
       }
     })
+    last = state
     if (state.hasArticle && state.articleCount > 0) return { loaded: true, source: 'nce1', ...state }
-    if (state.miss || /\/articles\/?$/.test(new URL(state.href).pathname)) {
-      await page.goto(`http://tauri.localhost/practice-articles/${fallbackId}`, {
-        waitUntil: 'domcontentloaded',
-      })
-      await page.waitForSelector('.typing-article', { timeout: 20000 })
-      return { loaded: true, source: 'backup-articles', fallback: true, ...state }
-    }
+    if (state.miss || /\/articles\/?$/.test(new URL(state.href).pathname)) return { loaded: false, ...state }
     await pause(200)
   }
-  await page.goto(`http://tauri.localhost/practice-articles/${fallbackId}`, {
-    waitUntil: 'domcontentloaded',
-  })
-  await page.waitForSelector('.typing-article', { timeout: 20000 })
-  return { loaded: true, source: 'backup-articles', fallback: true, timeout: true }
+  return { loaded: false, timeout: true, ...last }
 }
 
 try {
@@ -823,7 +806,9 @@ try {
     const beforeCount = sources.inputWordNumber ?? 0
     const resolved = phaseFromSources(sources)
     const practiceType = await typePracticeItem(word, sources)
-    const advanced = await waitForWordAdvance(beforeCount, word)
+    const advanced = await waitForWordAdvance(sources.liveIdentity)
+    if (advanced.sources)
+      assert.equal(advanced.sources.wrongWordCount, sources.wrongWordCount, 'Correct input must not add wrong words')
     report.wordTokenGuard = (report.wordTokenGuard || 0) + 1
     assert.ok(report.wordTokenGuard < 250, `Word loop ran too long: ${JSON.stringify(report.typedEvents)}`)
     if (!advanced.advanced && !advanced.complete) {
@@ -831,8 +816,10 @@ try {
       console.log(`retry word=${word} type=${resolved.phase} inputWordNumber=${beforeCount}`)
       continue
     }
-    unique.add(word)
-    if (!report.typedWords.includes(word)) report.typedWords.push(word)
+    if (!sources.livePhase.startsWith('复习')) {
+      unique.add(word)
+      if (!report.typedWords.includes(word)) report.typedWords.push(word)
+    }
     const phase = resolved.phase
     report.phaseCounts[phase] = (report.phaseCounts[phase] || 0) + 1
     report.typedEvents.push({ word, practiceType, phase, cursor: sources.cursor || null })
@@ -885,21 +872,14 @@ try {
   assert.ok(isBuiltinWordBook(report.wordAfter.sdict))
   await page.screenshot({ path: resolve(evidence, 'native-local-practice-matrix.png') })
 
-  const nce1Available = report.builtinProbe.nce1?.ok === true && (report.builtinProbe.nce1?.count || 0) >= 1
-  report.articleOpen = nce1Available
-    ? await openArticlePractice(OFFICIAL_T01_BUILTIN_ARTICLE_BOOK.id, 'backup-articles')
-    : {
-        loaded: true,
-        source: 'backup-articles',
-        fallback: true,
-        reason: 'dest NCE_1.json did not load',
-      }
-  if (!nce1Available) {
-    await page.goto('http://tauri.localhost/practice-articles/backup-articles', {
-      waitUntil: 'domcontentloaded',
-    })
-    await page.waitForSelector('.typing-article', { timeout: 20000 })
-  }
+  assert.equal(report.builtinProbe.nce1?.ok, true, 'Bundled NCE1 resource must load')
+  assert.ok(report.builtinProbe.nce1.count >= 1)
+  report.articleOpen = await openArticlePractice(OFFICIAL_T01_BUILTIN_ARTICLE_BOOK.id)
+  assert.equal(report.articleOpen.loaded, true, `Bundled NCE1 practice failed: ${JSON.stringify(report.articleOpen)}`)
+  assert.equal(String(report.articleOpen.id), String(OFFICIAL_T01_BUILTIN_ARTICLE_BOOK.id))
+  assert.equal(report.articleOpen.custom, false)
+  assert.equal(report.articleOpen.enName, OFFICIAL_T01_BUILTIN_ARTICLE_BOOK.enName)
+  assert.equal(report.articleOpen.url, OFFICIAL_T01_BUILTIN_ARTICLE_BOOK.url)
   report.articleSource = report.articleOpen.source
   await ready()
   await dismissOverlays()
@@ -916,6 +896,14 @@ try {
     `Article sections not ready: ${JSON.stringify(startedArticle)} href=${page.url()} source=${report.articleSource}`
   )
 
+  report.articleExpectedSentences = await page.evaluate(() => {
+    const base = document.querySelector('#__nuxt').__vue_app__.config.globalProperties.$pinia._s.get('base')
+    return base.sbook.articles[0].text
+      .split(/\n\s*\n/)
+      .map(text => text.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+  })
+  assert.ok(report.articleExpectedSentences.length >= OFFICIAL_T01_ARTICLE_SENTENCE_COUNT)
   while (report.completedSentences.length < OFFICIAL_T01_ARTICLE_SENTENCE_COUNT) {
     const cursor = await collectArticleCursor()
     if (cursor.isEnd && report.completedSentences.length >= OFFICIAL_T01_ARTICLE_SENTENCE_COUNT) break
@@ -932,12 +920,16 @@ try {
       await pause(250)
     }
     const after = await collectArticleCursor()
+    assert.equal(after.wrongInputCount, 0, 'Bundled article typing must not introduce wrong input')
     while (report.completedSentences.length < (after.finishedDomSentences || 0)) {
-      const fallback =
-        report.articleSource === 'backup-articles'
-          ? OFFICIAL_T01_ARTICLE_SENTENCES[report.completedSentences.length]
-          : cursor.sentenceText.trim()
-      report.completedSentences.push(fallback || cursor.sentenceText.trim())
+      const sentence = after.completedSentenceTexts[report.completedSentences.length]?.trim()
+      assert.ok(sentence, 'Completed bundled article sentence must have actual text')
+      assert.equal(
+        sentence,
+        report.articleExpectedSentences[report.completedSentences.length],
+        'Observed completed sentence must match the bundled article text'
+      )
+      report.completedSentences.push(sentence)
       console.log(`article sentence ${report.completedSentences.length}/${OFFICIAL_T01_ARTICLE_SENTENCE_COUNT}`)
     }
     if (report.completedSentences.length >= OFFICIAL_T01_ARTICLE_SENTENCE_COUNT) break

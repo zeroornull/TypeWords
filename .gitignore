@@ -45,3 +45,13 @@ docs/plans
 # Tauri generated build outputs (keep Cargo.lock)
 /src-tauri/target/
 /src-tauri/gen/schemas/
+
+# Local tool state, not application source
+.omx/
+.codebase-memory/
+.agents/
+/skills-lock.json
+/install.ps1
+
+# Experimental native desktop build output
+/desktop-native/*.exe

@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 import ts from 'typescript'
+import { reactive } from 'vue'
 
 const root = process.env.TYPEWORDS_TEST_ROOT || process.cwd()
 
@@ -37,15 +38,12 @@ function extractBraced(source, startNeedle) {
 
 function loadHelpers() {
   const exports = {}
-  runInNewContext(
-    transpile(readFileSync(resolve(root, 'app/core/composables/dictResourceLoad.ts'), 'utf8')),
-    {
-      exports,
-      require() {
-        throw new Error('dictResourceLoad must stay dependency-free')
-      },
-    }
-  )
+  runInNewContext(transpile(readFileSync(resolve(root, 'app/core/composables/dictResourceLoad.ts'), 'utf8')), {
+    exports,
+    require() {
+      throw new Error('dictResourceLoad must stay dependency-free')
+    },
+  })
   return exports
 }
 
@@ -93,13 +91,83 @@ function loadStore() {
   }
 }
 
-const {
-  applyFetchedDictResource,
-  resolveLastLearnIndex,
-  getDefaultDict,
-  isSameDictResource,
-  createStore,
-} = loadStore()
+const { applyFetchedDictResource, resolveLastLearnIndex, getDefaultDict, isSameDictResource, createStore } = loadStore()
+
+test('changeDict retains the same reactive official book words for a usable study task', async () => {
+  const words = Array.from({ length: 24 }, (_, i) => ({ word: `word${i}` }))
+  const current = getDefaultDict({
+    id: 1,
+    enName: 'cet4',
+    words,
+    lastLearnIndex: 20,
+    perDayStudyNumber: 2,
+  })
+  const other = getDefaultDict({ id: 2, words: [{ word: 'other' }] })
+  const custom = getDefaultDict({ id: 'custom', custom: true, words: [{ word: 'personal' }] })
+  const store = reactive(
+    createStore(
+      [
+        getDefaultDict({ id: 'wordCollect' }),
+        getDefaultDict({ id: 'wordWrong' }),
+        getDefaultDict({ id: 'wordKnown' }),
+        current,
+        other,
+        custom,
+      ],
+      []
+    )
+  )
+  const incoming = store.word.bookList[3]
+  const incomingWords = incoming.words
+  await store.changeDict(incoming)
+  assert.equal(store.word.bookList[3], incoming)
+  assert.equal(store.word.studyIndex, 3)
+  assert.equal(incoming.words, incomingWords)
+  assert.equal(incoming.words.length, 24, 'selection must retain the fetched official words')
+  assert.equal(incoming.lastLearnIndex, 20)
+  assert.equal(store.word.bookList[4].words.length, 0, 'other official words must still be released')
+  assert.equal(store.word.bookList[5].words[0].word, 'personal')
+
+  const hooks = readFileSync(resolve(root, 'app/core/hooks/dict.ts'), 'utf8')
+  const context = {
+    useBaseStore: () => ({ sdict: incoming, knownWordsSet: new Set() }),
+    useSettingStore: () => ({ ignoreSimpleWord: false, wordReviewRatio: 0 }),
+  }
+  runInNewContext(transpile(extractFunction(hooks, 'getCurrentStudyWord')), context)
+  const task = context.getCurrentStudyWord()
+  assert.deepEqual(
+    Array.from(task.new, item => item.word),
+    ['word20', 'word21']
+  )
+  assert.equal(task.review.length, 0)
+})
+
+test('changeBook retains the same reactive official articles and existing progress', async () => {
+  const current = getDefaultDict({
+    id: 246,
+    enName: 'nce1',
+    articles: Array.from({ length: 5 }, (_, i) => ({ id: `article${i}`, title: `Lesson ${i}` })),
+    lastLearnIndex: 3,
+    statistics: [{ spend: 1200 }],
+  })
+  const other = getDefaultDict({ id: 247, articles: [{ title: 'Other official lesson' }] })
+  const custom = getDefaultDict({ id: 'custom-article', custom: true, articles: [{ title: 'Personal lesson' }] })
+  const store = reactive(createStore([], [getDefaultDict({ id: 'articleCollect' }), current, other, custom]))
+  const incoming = store.article.bookList[1]
+  const incomingArticles = incoming.articles
+  const statistics = incoming.statistics
+  await store.changeBook(incoming)
+  assert.equal(store.article.studyIndex, 1)
+  assert.equal(store.article.bookList[1], incoming)
+  assert.equal(incoming.articles, incomingArticles)
+  assert.equal(incoming.articles.length, 5)
+  assert.equal(incoming.articles[incoming.lastLearnIndex].title, 'Lesson 3')
+  assert.equal(incoming.lastLearnIndex, 3)
+  assert.equal(incoming.statistics, statistics)
+  assert.equal(incoming.statistics[0].spend, 1200)
+  assert.equal(store.article.bookList[2].articles.length, 0)
+  assert.equal(store.article.bookList[3].articles[0].title, 'Personal lesson')
+})
 
 test('changeDict leftover official dest CET-4 lastLearnIndex=20 stays on empty fetch', async () => {
   const leftover = {
@@ -411,7 +479,10 @@ test('changeBook / forcePush / hydrate do not assign empty default over leftover
   const sync = readFileSync(resolve(root, 'app/core/composables/useDataSyncPersistence.ts'), 'utf8')
   const practiceArticles = readFileSync(resolve(root, 'app/pages/(articles)/practice-articles/[id].vue'), 'utf8')
   const book = readFileSync(resolve(root, 'app/pages/(articles)/book/[id].vue'), 'utf8')
-  const sentenceInit = readFileSync(resolve(root, 'app/composables/practice-sentences/usePracticeSentenceInit.ts'), 'utf8')
+  const sentenceInit = readFileSync(
+    resolve(root, 'app/composables/practice-sentences/usePracticeSentenceInit.ts'),
+    'utf8'
+  )
   const dict = readFileSync(resolve(root, 'app/pages/(words)/dict.vue'), 'utf8')
   const utils = readFileSync(resolve(root, 'app/core/utils/index.ts'), 'utf8')
 
@@ -426,7 +497,10 @@ test('changeBook / forcePush / hydrate do not assign empty default over leftover
   assert.match(sync, /applyFetchedDictResource\(book, r\)/)
   assert.doesNotMatch(sync, /bookList\[index\] = (r|getDefaultDict)/)
   assert.match(sync, /async function forcePushLocalDataToRemote/)
-  assert.doesNotMatch(sync.slice(sync.indexOf('async function forcePushLocalDataToRemote')), /hydrateDictData|_getDictDataByUrl|getDefaultDict\(\)/)
+  assert.doesNotMatch(
+    sync.slice(sync.indexOf('async function forcePushLocalDataToRemote')),
+    /hydrateDictData|_getDictDataByUrl|getDefaultDict\(\)/
+  )
   assert.match(practiceArticles, /if \(!dict\.articles\.length\)/)
   assert.match(practiceArticles, /await store\.changeBook\(dict\)/)
   assert.match(book, /if \(!sbook\.articles\.length\)/)
@@ -436,7 +510,10 @@ test('changeBook / forcePush / hydrate do not assign empty default over leftover
   assert.match(dict, /isSameDictResource\(v, edit\)/)
   assert.match(dict, /edit\.lastLearnIndex = resolveLastLearnIndex\(leftover\)/)
   assert.equal((dict.match(/keepLeftoverLearnIndex\(runtimeStore\.editDict\)/g) || []).length, 3)
-  assert.match(dict, /keepLeftoverLearnIndex\(runtimeStore\.editDict\)\s*\n\s*await base\.changeDict\(runtimeStore\.editDict\)/)
+  assert.match(
+    dict,
+    /keepLeftoverLearnIndex\(runtimeStore\.editDict\)\s*\n\s*await base\.changeDict\(runtimeStore\.editDict\)/
+  )
   assert.match(dict, /await base\.changeDict\(runtimeStore\.editDict\)/)
   assert.match(utils, /return getDefaultDict\(\)/)
 })

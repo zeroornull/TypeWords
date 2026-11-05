@@ -36,7 +36,7 @@ const currentWord = $computed(() => question?.candidates[question.correctIndex]?
 
 function openCollectPicker(word: Word, event: MouseEvent) {
   openWordCollectPicker(word, event.currentTarget as HTMLElement, {
-    excludeDictId: dict?.id,
+    excludeDictId: dict?.id == null ? undefined : String(dict.id),
   })
 }
 
